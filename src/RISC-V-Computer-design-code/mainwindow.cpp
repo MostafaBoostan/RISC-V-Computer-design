@@ -272,3 +272,4 @@ std::string MainWindow::assemble(const std::string& line) {
 
     return "UNSUPPORTED";
 }
+

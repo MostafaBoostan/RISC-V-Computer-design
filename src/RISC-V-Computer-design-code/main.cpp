@@ -1,3 +1,4 @@
+
 #include <QApplication>
 #include "mainwindow.h"
 
@@ -7,3 +8,4 @@ int main(int argc, char *argv[]) {
     window.show();
     return app.exec();
 }
+
