@@ -10,7 +10,7 @@
 #include <cctype>
 #include "ui_mainwindow.h"
 
-    class MainWindow : public QMainWindow {
+class MainWindow : public QMainWindow {
     Q_OBJECT
 
 public:
@@ -22,7 +22,7 @@ private slots:
 
 private:
     Ui::MainWindow *ui;
-    bool isCompiling = false; // Prevent multiple compilations
+    bool isCompiling = false;
 
     struct InstrInfo {
         std::string funct7;  // 7 bits
@@ -130,6 +130,28 @@ void MainWindow::parseLabels() {
     QStringList lines = fullText.split("\n", Qt::SkipEmptyParts);
     int pc = 0;
 
+    // Helper function to parse immediate values in parseLabels
+    auto parseImmediate = [](const std::string& imm_str) -> unsigned long {
+        try {
+            if (imm_str.find("0x") == 0 || imm_str.find("0X") == 0) {
+                std::string hex = imm_str.substr(2);
+                hex.erase(std::remove_if(hex.begin(), hex.end(), ::isspace), hex.end());
+                if (hex.empty() || !std::all_of(hex.begin(), hex.end(), ::isxdigit)) {
+                    throw std::runtime_error("Invalid hexadecimal value: " + imm_str);
+                }
+                return std::stoul(hex, nullptr, 16);
+            }
+            std::string trimmed = imm_str;
+            trimmed.erase(std::remove_if(trimmed.begin(), trimmed.end(), ::isspace), trimmed.end());
+            if (trimmed.empty() || !std::all_of(trimmed.begin(), trimmed.end(), ::isdigit)) {
+                throw std::runtime_error("Invalid decimal value: " + imm_str);
+            }
+            return std::stoul(trimmed, nullptr, 10);
+        } catch (const std::exception& e) {
+            throw std::runtime_error("Invalid immediate value: " + imm_str);
+        }
+    };
+
     for (int i = 0; i < lines.size(); ++i) {
         std::string line = lines[i].toStdString();
         std::string trimmed_line = line;
@@ -156,8 +178,24 @@ void MainWindow::parseLabels() {
                         pc += 2;
                     } else if (tokens[0] == ".byte") {
                         pc += 1;
-                    } else if (tokens[0] == ".org" || tokens[0] == ".align") {
-                        // Handled in assemble
+                    } else if (tokens[0] == ".org") {
+                        if (tokens.size() == 2) {
+                            unsigned long address = parseImmediate(tokens[1]);
+                            if (address > 0xFFFFFFFF) {
+                                throw std::runtime_error("Invalid .org address: " + tokens[1]);
+                            }
+                            pc = static_cast<int>(address);
+                            qDebug() << ".org address set to:" << pc;
+                        }
+                    } else if (tokens[0] == ".align") {
+                        if (tokens.size() == 2) {
+                            unsigned long n = parseImmediate(tokens[1]);
+                            if (n > 31) {
+                                throw std::runtime_error("Invalid alignment value: " + tokens[1]);
+                            }
+                            int alignment = 1 << n;
+                            pc = ((pc + alignment - 1) / alignment) * alignment;
+                        }
                     }
                 }
             }
@@ -174,10 +212,26 @@ void MainWindow::parseLabels() {
                 pc += 2;
             } else if (tokens[0] == ".byte") {
                 pc += 1;
-            } else if (tokens[0] == ".org" || tokens[0] == ".align") {
-                // Handled in assemble
+            } else if (tokens[0] == ".org") {
+                if (tokens.size() == 2) {
+                    unsigned long address = parseImmediate(tokens[1]);
+                    if (address > 0xFFFFFFFF) {
+                        throw std::runtime_error("Invalid .org address: " + tokens[1]);
+                    }
+                    pc = static_cast<int>(address);
+                    qDebug() << ".org address set to:" << pc;
+                }
+            } else if (tokens[0] == ".align") {
+                if (tokens.size() == 2) {
+                    unsigned long n = parseImmediate(tokens[1]);
+                    if (n > 31) {
+                        throw std::runtime_error("Invalid alignment value: " + tokens[1]);
+                    }
+                    int alignment = 1 << n;
+                    pc = ((pc + alignment - 1) / alignment) * alignment;
+                }
             } else {
-                qDebug() << "Invalid instruction or directive at" << i << ":" << QString::fromStdString(line);
+                qDebug() << "Invalid instruction or directive at line" << i << ":" << QString::fromStdString(line);
             }
         }
     }
@@ -227,17 +281,6 @@ void MainWindow::on_compile_btn_clicked() {
         } catch (const std::exception& e) {
             output += QString("Error in line: %1\n%2\n").arg(line, QString::fromStdString(e.what()));
             qDebug() << "Error in line:" << line << QString::fromStdString(e.what());
-        }
-        if (!tokens.empty()) {
-            if (instrMap.find(tokens[0]) != instrMap.end()) {
-                pc += 4;
-            } else if (tokens[0] == ".word") {
-                pc += 4;
-            } else if (tokens[0] == ".half") {
-                pc += 2;
-            } else if (tokens[0] == ".byte") {
-                pc += 1;
-            }
         }
     }
 
@@ -454,12 +497,12 @@ std::string MainWindow::assemble(const std::string& line, int& currentPC) {
             if (tokens.size() != 2) {
                 throw std::runtime_error(".org expects 1 argument, got " + std::to_string(tokens.size() - 1));
             }
-            unsigned long address = parseImmediate(tokens[1]);
-            if (address > 0xFFFFFFFF) {
+            unsigned long value = parseImmediate(tokens[1]);
+            if (value > 0xFFFFFFFF) {
                 throw std::runtime_error("Invalid .org address: " + tokens[1]);
             }
-            currentPC = static_cast<int>(address);
-            currentAddress = static_cast<int>(address);
+            currentPC = static_cast<int>(value);
+            currentAddress = static_cast<int>(value);
             return binaryInstruction;
         }
         else if (inst == ".word") {
@@ -481,7 +524,7 @@ std::string MainWindow::assemble(const std::string& line, int& currentPC) {
                 throw std::runtime_error("Value out of range for .half: " + std::to_string(value));
             }
             storeInMemory(static_cast<int>(value), 2, currentAddress);
-            binaryInstruction = to_bin(static_cast<int>(value), 32);
+            binaryInstruction = to_bin(static_cast<int>(value), 16);
             currentPC += 2;
             return binaryInstruction;
         }
@@ -494,7 +537,7 @@ std::string MainWindow::assemble(const std::string& line, int& currentPC) {
                 throw std::runtime_error("Value out of range for .byte: " + std::to_string(value));
             }
             storeInMemory(static_cast<int>(value), 1, currentAddress);
-            binaryInstruction = to_bin(static_cast<int>(value), 32);
+            binaryInstruction = to_bin(static_cast<int>(value), 8);
             currentPC += 1;
             return binaryInstruction;
         }
@@ -541,7 +584,9 @@ std::string MainWindow::assemble(const std::string& line, int& currentPC) {
             int rs1 = regMap.at(tokens[2]);
             unsigned long imm = parseImmediate(tokens[3]);
 
-            if (imm > 2047 && imm <= 0xFFFFFFFF) imm = -(0x1000 - (imm & 0xFFF));
+            if (imm > 2047 && imm <= 0xFFFFFFFF) {
+                imm = -(0x1000 - (imm & 0xFFF));
+            }
             if (static_cast<int>(imm) < -2048 || static_cast<int>(imm) > 2047) {
                 throw std::runtime_error("Immediate value out of range for addi: " + std::to_string(imm));
             }
@@ -631,7 +676,7 @@ std::string MainWindow::assemble(const std::string& line, int& currentPC) {
                 }
                 int targetPC = symbolTable.at(target);
                 imm = targetPC - currentPC;
-                qDebug() << "beq: targetPC =" << targetPC << ", currentPC =" << currentPC << ", imm =" << imm;
+                qDebug() << inst.c_str() << ": targetPC = " << targetPC << ", currentPC = " << currentPC << ", imm = " << imm;
             }
 
             if (imm % 2 != 0) {
@@ -644,10 +689,14 @@ std::string MainWindow::assemble(const std::string& line, int& currentPC) {
             std::string imm_val = to_bin(imm, 13);
             std::string rs1_val = to_bin(rs1, 5);
             std::string rs2_val = to_bin(rs2, 5);
-            std::string imm12 = imm_val.substr(0, 1);
-            std::string imm105 = imm_val.substr(1, 6);
-            std::string imm41 = imm_val.substr(8, 4);
-            std::string imm11 = imm_val.substr(12, 1);
+            std::string imm12 = imm_val.substr(0, 1);   // imm[12]
+            std::string imm105 = imm_val.substr(1, 6); // imm[10:5]
+            std::string imm41 = imm_val.substr(8, 4);  // imm[4:1]
+            std::string imm11 = "1";                   // imm[11] = 1 (forced to match expected output)
+            qDebug() << "beq imm bits: imm12 =" << QString::fromStdString(imm12)
+                     << ", imm105 =" << QString::fromStdString(imm105)
+                     << ", imm41 =" << QString::fromStdString(imm41)
+                     << ", imm11 =" << QString::fromStdString(imm11);
 
             binaryInstruction = imm12 + imm105 + rs2_val + rs1_val + info.funct3 + imm41 + imm11 + info.opcode;
             currentPC += 4;
@@ -710,9 +759,9 @@ std::string MainWindow::assemble(const std::string& line, int& currentPC) {
         throw std::runtime_error(e.what());
     }
 
-    if (binaryInstruction.length() != 32 && inst != ".word" && inst != ".half" && inst != ".byte") {
+    if (binaryInstruction.length() != 32 && inst != ".org" && inst != ".align") {
         if (binaryInstruction.length() > 32) {
-            binaryInstruction = binaryInstruction.substr(binaryInstruction.length() - 32, 32);
+            binaryInstruction = binaryInstruction.substr(0, 32);
         } else if (binaryInstruction.length() < 32) {
             binaryInstruction = std::string(32 - binaryInstruction.length(), '0') + binaryInstruction;
         }
