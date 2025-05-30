@@ -493,11 +493,23 @@ std::string MainWindow::assemble(const std::string& line, int& currentPC) {
         return "";
     }
 
+    // Check if the first token is a label
+    size_t instruction_start = 0;
     if (tokens[0].back() == ':') {
+        instruction_start = 1;
+        if (tokens.size() == 1) {
+            qDebug() << "Only label found in line:" << QString::fromStdString(line);
+            return "";
+        }
+    }
+
+    // Ensure there are tokens to process after the label (if any)
+    if (instruction_start >= tokens.size()) {
+        qDebug() << "No instruction after label in line:" << QString::fromStdString(line);
         return "";
     }
 
-    std::string inst = tokens[0];
+    std::string inst = tokens[instruction_start];
     if (instrMap.find(inst) == instrMap.end() && inst != ".org" && inst != ".word" &&
         inst != ".half" && inst != ".byte" && inst != ".align") {
         throw std::runtime_error("Instruction or directive not found: " + inst);
@@ -547,32 +559,32 @@ std::string MainWindow::assemble(const std::string& line, int& currentPC) {
 
     try {
         if (inst == ".org") {
-            if (tokens.size() != 2) {
-                throw std::runtime_error(".org requires 1 argument, got " + std::to_string(tokens.size() - 1));
+            if (tokens.size() != instruction_start + 2) {
+                throw std::runtime_error(".org requires 1 argument, got " + std::to_string(tokens.size() - instruction_start - 1));
             }
-            long long value = parseImmediate(tokens[1]);
+            long long value = parseImmediate(tokens[instruction_start + 1]);
             if (value > 0xFFFFFFFF) {
-                throw std::runtime_error("Invalid .org address: " + tokens[1]);
+                throw std::runtime_error("Invalid .org address: " + tokens[instruction_start + 1]);
             }
             currentPC = static_cast<int>(value);
             currentAddress = static_cast<int>(value);
             return "";
         }
         else if (inst == ".word") {
-            if (tokens.size() != 2) {
-                throw std::runtime_error(".word requires 1 argument, got " + std::to_string(tokens.size() - 1));
+            if (tokens.size() != instruction_start + 2) {
+                throw std::runtime_error(".word requires 1 argument, got " + std::to_string(tokens.size() - instruction_start - 1));
             }
-            long long value = parseImmediate(tokens[1]);
+            long long value = parseImmediate(tokens[instruction_start + 1]);
             storeInMemory(static_cast<int>(value), 4, currentAddress);
             binaryInstruction = to_bin(static_cast<int>(value), 32);
             currentPC += 4;
             return binaryInstruction;
         }
         else if (inst == ".half") {
-            if (tokens.size() != 2) {
-                throw std::runtime_error(".half requires 1 argument, got " + std::to_string(tokens.size() - 1));
+            if (tokens.size() != instruction_start + 2) {
+                throw std::runtime_error(".half requires 1 argument, got " + std::to_string(tokens.size() - instruction_start - 1));
             }
-            long long value = parseImmediate(tokens[1]);
+            long long value = parseImmediate(tokens[instruction_start + 1]);
             if (value > 65535 || value < -32768) {
                 throw std::runtime_error("Value out of range for .half: " + std::to_string(value));
             }
@@ -582,10 +594,10 @@ std::string MainWindow::assemble(const std::string& line, int& currentPC) {
             return binaryInstruction;
         }
         else if (inst == ".byte") {
-            if (tokens.size() != 2) {
-                throw std::runtime_error(".byte requires 1 argument, got " + std::to_string(tokens.size() - 1));
+            if (tokens.size() != instruction_start + 2) {
+                throw std::runtime_error(".byte requires 1 argument, got " + std::to_string(tokens.size() - instruction_start - 1));
             }
-            long long value = parseImmediate(tokens[1]);
+            long long value = parseImmediate(tokens[instruction_start + 1]);
             if (value > 255 || value < -128) {
                 throw std::runtime_error("Value out of range for .byte: " + std::to_string(value));
             }
@@ -595,12 +607,12 @@ std::string MainWindow::assemble(const std::string& line, int& currentPC) {
             return binaryInstruction;
         }
         else if (inst == ".align") {
-            if (tokens.size() != 2) {
-                throw std::runtime_error(".align requires 1 argument, got " + std::to_string(tokens.size() - 1));
+            if (tokens.size() != instruction_start + 2) {
+                throw std::runtime_error(".align requires 1 argument, got " + std::to_string(tokens.size() - instruction_start - 1));
             }
-            long long n = parseImmediate(tokens[1]);
+            long long n = parseImmediate(tokens[instruction_start + 1]);
             if (n > 31) {
-                throw std::runtime_error("Invalid alignment value: " + tokens[1]);
+                throw std::runtime_error("Invalid alignment value: " + tokens[instruction_start + 1]);
             }
             int alignment = 1 << n;
             int newAddress = ((currentPC + alignment - 1) / alignment) * alignment;
@@ -612,8 +624,8 @@ std::string MainWindow::assemble(const std::string& line, int& currentPC) {
         InstrInfo info = instrMap[inst];
 
         if (inst == "nop") {
-            if (tokens.size() != 1) {
-                throw std::runtime_error("nop expects no arguments, got " + std::to_string(tokens.size() - 1));
+            if (tokens.size() != instruction_start + 1) {
+                throw std::runtime_error("nop expects no arguments, got " + std::to_string(tokens.size() - instruction_start - 1));
             }
             std::string rd_val = to_bin(0, 5);
             std::string rs1_val = to_bin(0, 5);
@@ -622,11 +634,11 @@ std::string MainWindow::assemble(const std::string& line, int& currentPC) {
             currentPC += 4;
         }
         else if (inst == "li") {
-            if (tokens.size() != 3) {
-                throw std::runtime_error("li expects 2 arguments (rd, imm), got " + std::to_string(tokens.size() - 1));
+            if (tokens.size() != instruction_start + 3) {
+                throw std::runtime_error("li expects 2 arguments (rd, imm), got " + std::to_string(tokens.size() - instruction_start - 1));
             }
-            int rd = regMap.at(tokens[1]);
-            long long imm = parseImmediate(tokens[2]);
+            int rd = regMap.at(tokens[instruction_start + 1]);
+            long long imm = parseImmediate(tokens[instruction_start + 2]);
             std::string rd_val = to_bin(rd, 5);
 
             if (imm >= -2048 && imm <= 2047) {
@@ -647,11 +659,11 @@ std::string MainWindow::assemble(const std::string& line, int& currentPC) {
             }
         }
         else if (inst == "mv") {
-            if (tokens.size() != 3) {
-                throw std::runtime_error("mv expects 2 arguments (rd, rs), got " + std::to_string(tokens.size() - 1));
+            if (tokens.size() != instruction_start + 3) {
+                throw std::runtime_error("mv expects 2 arguments (rd, rs), got " + std::to_string(tokens.size() - instruction_start - 1));
             }
-            int rd = regMap.at(tokens[1]);
-            int rs = regMap.at(tokens[2]);
+            int rd = regMap.at(tokens[instruction_start + 1]);
+            int rs = regMap.at(tokens[instruction_start + 2]);
             std::string rd_val = to_bin(rd, 5);
             std::string rs1_val = to_bin(rs, 5);
             std::string imm_val = to_bin(0, 12);
@@ -659,11 +671,11 @@ std::string MainWindow::assemble(const std::string& line, int& currentPC) {
             currentPC += 4;
         }
         else if (inst == "not") {
-            if (tokens.size() != 3) {
-                throw std::runtime_error("not expects 2 arguments (rd, rs), got " + std::to_string(tokens.size() - 1));
+            if (tokens.size() != instruction_start + 3) {
+                throw std::runtime_error("not expects 2 arguments (rd, rs), got " + std::to_string(tokens.size() - instruction_start - 1));
             }
-            int rd = regMap.at(tokens[1]);
-            int rs = regMap.at(tokens[2]);
+            int rd = regMap.at(tokens[instruction_start + 1]);
+            int rs = regMap.at(tokens[instruction_start + 2]);
             std::string rd_val = to_bin(rd, 5);
             std::string rs1_val = to_bin(rs, 5);
             std::string imm_val = to_bin(-1, 12);
@@ -671,11 +683,11 @@ std::string MainWindow::assemble(const std::string& line, int& currentPC) {
             currentPC += 4;
         }
         else if (inst == "neg") {
-            if (tokens.size() != 3) {
-                throw std::runtime_error("neg expects 2 arguments (rd, rs), got " + std::to_string(tokens.size() - 1));
+            if (tokens.size() != instruction_start + 3) {
+                throw std::runtime_error("neg expects 2 arguments (rd, rs), got " + std::to_string(tokens.size() - instruction_start - 1));
             }
-            int rd = regMap.at(tokens[1]);
-            int rs = regMap.at(tokens[2]);
+            int rd = regMap.at(tokens[instruction_start + 1]);
+            int rs = regMap.at(tokens[instruction_start + 2]);
             std::string rd_val = to_bin(rd, 5);
             std::string rs1_val = to_bin(0, 5);
             std::string rs2_val = to_bin(rs, 5);
@@ -685,12 +697,12 @@ std::string MainWindow::assemble(const std::string& line, int& currentPC) {
         else if (inst == "add" || inst == "sub" || inst == "xor" || inst == "or" || inst == "and" ||
                  inst == "sll" || inst == "srl" || inst == "sra" || inst == "slt" || inst == "sltu" ||
                  inst == "mul" || inst == "mulh" || inst == "div" || inst == "rem") {
-            if (tokens.size() != 4) {
-                throw std::runtime_error(inst + " expects 3 arguments (rd, rs1, rs2), got " + std::to_string(tokens.size() - 1));
+            if (tokens.size() != instruction_start + 4) {
+                throw std::runtime_error(inst + " expects 3 arguments (rd, rs1, rs2), got " + std::to_string(tokens.size() - instruction_start - 1));
             }
-            int rd = regMap.at(tokens[1]);
-            int rs1 = regMap.at(tokens[2]);
-            int rs2 = regMap.at(tokens[3]);
+            int rd = regMap.at(tokens[instruction_start + 1]);
+            int rs1 = regMap.at(tokens[instruction_start + 2]);
+            int rs2 = regMap.at(tokens[instruction_start + 3]);
 
             std::string rd_val = to_bin(rd, 5);
             std::string rs1_val = to_bin(rs1, 5);
@@ -700,12 +712,12 @@ std::string MainWindow::assemble(const std::string& line, int& currentPC) {
             currentPC += 4;
         }
         else if (inst == "addi" || inst == "xori") {
-            if (tokens.size() != 4) {
-                throw std::runtime_error(inst + " expects 3 arguments (rd, rs1, imm), got " + std::to_string(tokens.size() - 1));
+            if (tokens.size() != instruction_start + 4) {
+                throw std::runtime_error(inst + " expects 3 arguments (rd, rs1, imm), got " + std::to_string(tokens.size() - instruction_start - 1));
             }
-            int rd = regMap.at(tokens[1]);
-            int rs1 = regMap.at(tokens[2]);
-            long long imm = parseImmediate(tokens[3]);
+            int rd = regMap.at(tokens[instruction_start + 1]);
+            int rs1 = regMap.at(tokens[instruction_start + 2]);
+            long long imm = parseImmediate(tokens[instruction_start + 3]);
 
             if (imm < -2048 || imm > 2047) {
                 throw std::runtime_error("Immediate value out of range for " + inst + ": " + std::to_string(imm));
@@ -719,11 +731,11 @@ std::string MainWindow::assemble(const std::string& line, int& currentPC) {
             currentPC += 4;
         }
         else if (inst == "lh" || inst == "lw" || inst == "jalr") {
-            if (tokens.size() != 3) {
-                throw std::runtime_error(inst + " expects 2 arguments (rd, imm(rs1)), got " + std::to_string(tokens.size() - 1));
+            if (tokens.size() != instruction_start + 3) {
+                throw std::runtime_error(inst + " expects 2 arguments (rd, imm(rs1)), got " + std::to_string(tokens.size() - instruction_start - 1));
             }
-            int rd = regMap.at(tokens[1]);
-            std::string imm_rs1 = tokens[2];
+            int rd = regMap.at(tokens[instruction_start + 1]);
+            std::string imm_rs1 = tokens[instruction_start + 2];
             size_t pos = imm_rs1.find('(');
             if (pos == std::string::npos || pos == 0 || imm_rs1.back() != ')') {
                 throw std::runtime_error("Invalid imm(rs1) format: " + imm_rs1);
@@ -748,11 +760,11 @@ std::string MainWindow::assemble(const std::string& line, int& currentPC) {
             currentPC += 4;
         }
         else if (inst == "sh" || inst == "sw") {
-            if (tokens.size() != 3) {
-                throw std::runtime_error(inst + " expects 2 arguments (rs2, imm(rs1)), got " + std::to_string(tokens.size() - 1));
+            if (tokens.size() != instruction_start + 3) {
+                throw std::runtime_error(inst + " expects 2 arguments (rs2, imm(rs1)), got " + std::to_string(tokens.size() - instruction_start - 1));
             }
-            int rs2 = regMap.at(tokens[1]);
-            std::string imm_rs1 = tokens[2];
+            int rs2 = regMap.at(tokens[instruction_start + 1]);
+            std::string imm_rs1 = tokens[instruction_start + 2];
             size_t pos = imm_rs1.find('(');
             if (pos == std::string::npos || pos == 0 || imm_rs1.back() != ')') {
                 throw std::runtime_error("Invalid imm(rs1) format: " + imm_rs1);
@@ -779,12 +791,12 @@ std::string MainWindow::assemble(const std::string& line, int& currentPC) {
             currentPC += 4;
         }
         else if (inst == "beq" || inst == "bne" || inst == "blt" || inst == "bge" || inst == "bltu" || inst == "bgeu") {
-            if (tokens.size() != 4) {
-                throw std::runtime_error(inst + " expects 3 arguments (rs1, rs2, label/imm), got " + std::to_string(tokens.size() - 1));
+            if (tokens.size() != instruction_start + 4) {
+                throw std::runtime_error(inst + " expects 3 arguments (rs1, rs2, label/imm), got " + std::to_string(tokens.size() - instruction_start - 1));
             }
-            int rs1 = regMap.at(tokens[1]);
-            int rs2 = regMap.at(tokens[2]);
-            std::string target = tokens[3];
+            int rs1 = regMap.at(tokens[instruction_start + 1]);
+            int rs2 = regMap.at(tokens[instruction_start + 2]);
+            std::string target = tokens[instruction_start + 3];
             target.erase(std::remove_if(target.begin(), target.end(), ::isspace), target.end());
             int imm;
 
@@ -822,11 +834,11 @@ std::string MainWindow::assemble(const std::string& line, int& currentPC) {
             currentPC += 4;
         }
         else if (inst == "jal") {
-            if (tokens.size() != 3) {
-                throw std::runtime_error("jal expects 2 arguments (rd, label/imm), got " + std::to_string(tokens.size() - 1));
+            if (tokens.size() != instruction_start + 3) {
+                throw std::runtime_error("jal expects 2 arguments (rd, label/imm), got " + std::to_string(tokens.size() - instruction_start - 1));
             }
-            int rd = regMap.at(tokens[1]);
-            std::string target = tokens[2];
+            int rd = regMap.at(tokens[instruction_start + 1]);
+            std::string target = tokens[instruction_start + 2];
             target.erase(std::remove_if(target.begin(), target.end(), ::isspace), target.end());
             int imm;
 
@@ -858,11 +870,11 @@ std::string MainWindow::assemble(const std::string& line, int& currentPC) {
             currentPC += 4;
         }
         else if (inst == "lui" || inst == "auipc") {
-            if (tokens.size() != 3) {
-                throw std::runtime_error(inst + " expects 2 arguments (rd, imm), got " + std::to_string(tokens.size() - 1));
+            if (tokens.size() != instruction_start + 3) {
+                throw std::runtime_error(inst + " expects 2 arguments (rd, imm), got " + std::to_string(tokens.size() - instruction_start - 1));
             }
-            int rd = regMap.at(tokens[1]);
-            long long imm = parseImmediate(tokens[2]);
+            int rd = regMap.at(tokens[instruction_start + 1]);
+            long long imm = parseImmediate(tokens[instruction_start + 2]);
 
             if (imm > 1048575) {
                 throw std::runtime_error("Immediate value out of range for " + inst + ": " + std::to_string(imm));
