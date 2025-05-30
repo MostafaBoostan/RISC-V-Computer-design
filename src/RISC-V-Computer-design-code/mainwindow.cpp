@@ -7,9 +7,10 @@
 #include <vector>
 #include <string>
 #include <algorithm>
+#include <cctype>
 #include "ui_mainwindow.h"
 
-class MainWindow : public QMainWindow {
+    class MainWindow : public QMainWindow {
     Q_OBJECT
 
 public:
@@ -36,12 +37,15 @@ private:
     std::unordered_map<std::string, int> regMap;
     std::unordered_map<std::string, int> symbolTable;
     int registers[32] = {0};
+    std::vector<uint8_t> memory; // Simulated memory
+    int currentAddress = 0; // Current memory address for directives
 
     bool isNumeric(const std::string& str);
     std::string to_bin(int val, int bits);
     std::vector<std::string> tokenize(const std::string& line);
-    std::string assemble(const std::string& line, int currentPC);
+    std::string assemble(const std::string& line, int& currentPC);
     void parseLabels();
+    void storeInMemory(int value, int size, int& address);
 };
 
 MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWindow) {
@@ -89,6 +93,9 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
         {"x30", 30}, {"x31", 31}
     };
 
+    // Initialize memory (e.g., 1MB)
+    memory.resize(1024 * 1024, 0);
+
     disconnect(ui->compile_btn, &QPushButton::clicked, this, &MainWindow::on_compile_btn_clicked);
     connect(ui->compile_btn, &QPushButton::clicked, this, &MainWindow::on_compile_btn_clicked);
 }
@@ -99,31 +106,22 @@ MainWindow::~MainWindow() {
 
 bool MainWindow::isNumeric(const std::string& str) {
     if (str.empty()) return false;
+    // Check for character literal (e.g., 'A')
+    if (str.length() == 3 && str[0] == '\'' && str[2] == '\'') {
+        return true;
+    }
+    // Check for hexadecimal
     if (str.find("0x") == 0 || str.find("0X") == 0) {
-        try {
-            size_t pos;
-            std::stoul(str, &pos, 16);
-            return pos == str.length();
-        } catch (...) {
-            return false;
-        }
+        std::string hex = str.substr(2);
+        return !hex.empty() && std::all_of(hex.begin(), hex.end(), ::isxdigit);
     }
+    // Check for binary
     if (str.find("0b") == 0 || str.find("0B") == 0) {
-        try {
-            size_t pos;
-            std::stoi(str.substr(2), &pos, 2);
-            return pos == str.length() - 2;
-        } catch (...) {
-            return false;
-        }
+        std::string bin = str.substr(2);
+        return !bin.empty() && std::all_of(bin.begin(), bin.end(), [](char c) { return c == '0' || c == '1'; });
     }
-    try {
-        size_t pos;
-        std::stoi(str, &pos);
-        return pos == str.length();
-    } catch (...) {
-        return false;
-    }
+    // Check for decimal
+    return !str.empty() && std::all_of(str.begin(), str.end(), ::isdigit);
 }
 
 void MainWindow::parseLabels() {
@@ -149,20 +147,51 @@ void MainWindow::parseLabels() {
                 std::string remaining = line.substr(colon_pos + 1);
                 remaining.erase(0, remaining.find_first_not_of(" \t"));
                 std::vector<std::string> tokens = tokenize(remaining);
-                if (!tokens.empty() && instrMap.find(tokens[0]) != instrMap.end()) {
-                    pc += 4;
+                if (!tokens.empty()) {
+                    if (instrMap.find(tokens[0]) != instrMap.end()) {
+                        pc += 4;
+                    } else if (tokens[0] == ".word") {
+                        pc += 4;
+                    } else if (tokens[0] == ".half") {
+                        pc += 2;
+                    } else if (tokens[0] == ".byte") {
+                        pc += 1;
+                    } else if (tokens[0] == ".org" || tokens[0] == ".align") {
+                        // Handled in assemble
+                    }
                 }
             }
             continue;
         }
 
         std::vector<std::string> tokens = tokenize(line);
-        if (!tokens.empty() && instrMap.find(tokens[0]) != instrMap.end()) {
-            pc += 4;
-        } else {
-            qDebug() << "Invalid instruction or empty line at" << i << ":" << QString::fromStdString(line);
+        if (!tokens.empty()) {
+            if (instrMap.find(tokens[0]) != instrMap.end()) {
+                pc += 4;
+            } else if (tokens[0] == ".word") {
+                pc += 4;
+            } else if (tokens[0] == ".half") {
+                pc += 2;
+            } else if (tokens[0] == ".byte") {
+                pc += 1;
+            } else if (tokens[0] == ".org" || tokens[0] == ".align") {
+                // Handled in assemble
+            } else {
+                qDebug() << "Invalid instruction or directive at" << i << ":" << QString::fromStdString(line);
+            }
         }
     }
+}
+
+void MainWindow::storeInMemory(int value, int size, int& address) {
+    if (address + size > memory.size()) {
+        memory.resize(address + size, 0);
+    }
+    // Store in little-endian format
+    for (int i = 0; i < size; ++i) {
+        memory[address + i] = (value >> (i * 8)) & 0xFF;
+    }
+    address += size;
 }
 
 void MainWindow::on_compile_btn_clicked() {
@@ -179,18 +208,36 @@ void MainWindow::on_compile_btn_clicked() {
     parseLabels();
 
     int pc = 0;
+    currentAddress = 0;
+    memory.clear();
+    memory.resize(1024 * 1024, 0);
+
     for (const QString& line : lines) {
         std::string stdLine = line.toStdString();
         std::vector<std::string> tokens = tokenize(stdLine);
-        std::string binaryInstruction = assemble(stdLine, pc);
-        if (!binaryInstruction.empty()) {
-            output += QString::fromStdString(binaryInstruction) + "\n";
-            qDebug() << "Output for line:" << line << QString::fromStdString(binaryInstruction);
-        } else {
-            qDebug() << "No output for line:" << line;
+        std::string binaryInstruction;
+        try {
+            binaryInstruction = assemble(stdLine, pc);
+            if (!binaryInstruction.empty()) {
+                output += QString::fromStdString(binaryInstruction) + "\n";
+                qDebug() << "Output for line:" << line << QString::fromStdString(binaryInstruction);
+            } else {
+                qDebug() << "No output for line:" << line;
+            }
+        } catch (const std::exception& e) {
+            output += QString("Error in line: %1\n%2\n").arg(line, QString::fromStdString(e.what()));
+            qDebug() << "Error in line:" << line << QString::fromStdString(e.what());
         }
-        if (!tokens.empty() && instrMap.find(tokens[0]) != instrMap.end()) {
-            pc += 4;
+        if (!tokens.empty()) {
+            if (instrMap.find(tokens[0]) != instrMap.end()) {
+                pc += 4;
+            } else if (tokens[0] == ".word") {
+                pc += 4;
+            } else if (tokens[0] == ".half") {
+                pc += 2;
+            } else if (tokens[0] == ".byte") {
+                pc += 1;
+            }
         }
     }
 
@@ -224,35 +271,47 @@ std::vector<std::string> MainWindow::tokenize(const std::string& line) {
     std::string token;
     bool inParentheses = false;
 
+    // Trim leading and trailing whitespace
     std::string trimmed_line = line;
-    trimmed_line.erase(0, trimmed_line.find_first_not_of(" \t"));
-    trimmed_line.erase(trimmed_line.find_last_not_of(" \t") + 1);
+    auto start = std::find_if(trimmed_line.begin(), trimmed_line.end(), [](unsigned char c) { return !std::isspace(c); });
+    trimmed_line = std::string(start, trimmed_line.end());
+    auto end = std::find_if(trimmed_line.rbegin(), trimmed_line.rend(), [](unsigned char c) { return !std::isspace(c); }).base();
+    trimmed_line = std::string(trimmed_line.begin(), end);
+
     if (trimmed_line.empty()) {
         return tokens;
     }
 
+    // Handle labels
     size_t colon_pos = trimmed_line.find(':');
     if (colon_pos != std::string::npos) {
         std::string label = trimmed_line.substr(0, colon_pos);
-        tokens.push_back(label + ":");
+        label.erase(std::remove_if(label.begin(), label.end(), ::isspace), label.end());
+        if (!label.empty()) {
+            tokens.push_back(label + ":");
+        }
         if (colon_pos + 1 < trimmed_line.length()) {
-            trimmed_line = line.substr(line.find(':') + 1);
-            trimmed_line.erase(0, trimmed_line.find_first_not_of(" \t"));
+            trimmed_line = trimmed_line.substr(colon_pos + 1);
+            start = std::find_if(trimmed_line.begin(), trimmed_line.end(), [](unsigned char c) { return !std::isspace(c); });
+            trimmed_line = std::string(start, trimmed_line.end());
         } else {
-            qDebug() << "Tokens for line:" << QString::fromStdString(line) << tokens.size() << tokens;
+            qDebug() << "Tokens for line:" << QString::fromStdString(line) << QString::number(tokens.size()) << (tokens.empty() ? "" : QString::fromStdString(tokens.back()));
             return tokens;
         }
     }
 
+    // Split into tokens
     token.clear();
     bool instruction_found = false;
     size_t i = 0;
+
+    // Check for instructions
     for (const auto& instr : instrMap) {
         std::string inst = instr.first;
         if (trimmed_line.length() >= inst.length() &&
             trimmed_line.substr(0, inst.length()) == inst &&
             (trimmed_line.length() == inst.length() ||
-             trimmed_line[inst.length()] == ' ' ||
+             std::isspace(trimmed_line[inst.length()]) ||
              trimmed_line[inst.length()] == ',')) {
             tokens.push_back(inst);
             i = inst.length();
@@ -261,14 +320,31 @@ std::vector<std::string> MainWindow::tokenize(const std::string& line) {
         }
     }
 
+    // Check for directives if no instruction found
     if (!instruction_found) {
-        if (!trimmed_line.empty()) {
-            tokens.push_back(trimmed_line);
+        std::vector<std::string> directives = {".org", ".word", ".half", ".byte", ".align"};
+        for (const auto& directive : directives) {
+            if (trimmed_line.length() >= directive.length() &&
+                trimmed_line.substr(0, directive.length()) == directive &&
+                (trimmed_line.length() == directive.length() ||
+                 std::isspace(trimmed_line[directive.length()]) ||
+                 trimmed_line[directive.length()] == ',')) {
+                tokens.push_back(directive);
+                i = directive.length();
+                instruction_found = true;
+                break;
+            }
         }
-        qDebug() << "Tokens for line:" << QString::fromStdString(line) << tokens.size() << tokens;
+    }
+
+    // If neither instruction nor directive, treat as invalid
+    if (!instruction_found && !trimmed_line.empty()) {
+        tokens.push_back(trimmed_line);
+        qDebug() << "Tokens for line:" << QString::fromStdString(line) << QString::number(tokens.size()) << QString::fromStdString(tokens.back());
         return tokens;
     }
 
+    // Process remaining tokens
     token.clear();
     bool expect_operand = true;
     for (; i < trimmed_line.length(); ++i) {
@@ -289,16 +365,7 @@ std::vector<std::string> MainWindow::tokenize(const std::string& line) {
             continue;
         }
 
-        if (c == ',' && !inParentheses) {
-            if (!token.empty()) {
-                tokens.push_back(token);
-                token.clear();
-                expect_operand = true;
-            }
-            continue;
-        }
-
-        if (c == ' ' && !inParentheses) {
+        if ((c == ',' || std::isspace(c)) && !inParentheses) {
             if (!token.empty()) {
                 tokens.push_back(token);
                 token.clear();
@@ -314,11 +381,14 @@ std::vector<std::string> MainWindow::tokenize(const std::string& line) {
         tokens.push_back(token);
     }
 
-    qDebug() << "Tokens for line:" << QString::fromStdString(line) << tokens.size() << tokens;
+    // Remove empty tokens
+    tokens.erase(std::remove_if(tokens.begin(), tokens.end(), [](const std::string& t) { return t.empty(); }), tokens.end());
+
+    qDebug() << "Tokens for line:" << QString::fromStdString(line) << QString::number(tokens.size()) << (tokens.empty() ? "" : QString::fromStdString(tokens[0]));
     return tokens;
 }
 
-std::string MainWindow::assemble(const std::string& line, int currentPC) {
+std::string MainWindow::assemble(const std::string& line, int& currentPC) {
     std::string binaryInstruction;
     std::vector<std::string> tokens = tokenize(line);
     if (tokens.empty()) {
@@ -331,38 +401,126 @@ std::string MainWindow::assemble(const std::string& line, int currentPC) {
     }
 
     std::string inst = tokens[0];
-    if (instrMap.find(inst) == instrMap.end()) {
-        qDebug() << "Instruction not found:" << QString::fromStdString(inst);
-        return binaryInstruction;
+    if (instrMap.find(inst) == instrMap.end() && inst != ".org" && inst != ".word" &&
+        inst != ".half" && inst != ".byte" && inst != ".align") {
+        throw std::runtime_error("Instruction or directive not found: " + inst);
     }
 
-    InstrInfo info = instrMap[inst];
+    // Helper function to parse immediate values
+    auto parseImmediate = [inst](const std::string& imm_str) -> unsigned long {
+        try {
+            // Check for character literal (e.g., 'A'), only allowed for .byte
+            if (imm_str.length() == 3 && imm_str[0] == '\'' && imm_str[2] == '\'') {
+                if (inst != ".byte") {
+                    throw std::runtime_error("Character literals like '" + imm_str + "' are only allowed with .byte directive");
+                }
+                char c = imm_str[1];
+                return static_cast<unsigned long>(c);
+            }
+            // Check for binary
+            if (imm_str.find("0b") == 0 || imm_str.find("0B") == 0) {
+                std::string binary = imm_str.substr(2);
+                binary.erase(std::remove_if(binary.begin(), binary.end(), ::isspace), binary.end());
+                if (binary.empty() || !std::all_of(binary.begin(), binary.end(), [](char c) { return c == '0' || c == '1'; })) {
+                    throw std::runtime_error("Invalid binary value: " + imm_str);
+                }
+                return std::stoul(binary, nullptr, 2);
+            }
+            // Check for hexadecimal
+            if (imm_str.find("0x") == 0 || imm_str.find("0X") == 0) {
+                std::string hex = imm_str.substr(2);
+                hex.erase(std::remove_if(hex.begin(), hex.end(), ::isspace), hex.end());
+                if (hex.empty() || !std::all_of(hex.begin(), hex.end(), ::isxdigit)) {
+                    throw std::runtime_error("Invalid hexadecimal value: " + imm_str);
+                }
+                qDebug() << "Parsing hex:" << QString::fromStdString(hex);
+                return std::stoul(hex, nullptr, 16);
+            }
+            // Decimal
+            std::string trimmed = imm_str;
+            trimmed.erase(std::remove_if(trimmed.begin(), trimmed.end(), ::isspace), trimmed.end());
+            if (trimmed.empty() || !std::all_of(trimmed.begin(), trimmed.end(), ::isdigit)) {
+                throw std::runtime_error("Invalid decimal value: " + imm_str);
+            }
+            return std::stoul(trimmed, nullptr, 10);
+        } catch (const std::exception& e) {
+            throw std::runtime_error("Invalid immediate value: " + imm_str + " (" + e.what() + ")");
+        }
+    };
 
     try {
-        // Helper function to parse immediate values (Decimal, Hex, Binary)
-        auto parseImmediate = [](const std::string& imm_str) -> int {
-            try {
-                if (imm_str.find("0b") == 0 || imm_str.find("0B") == 0) {
-                    // Binary format
-                    std::string binary = imm_str.substr(2);
-                    return std::stoi(binary, nullptr, 2);
-                } else if (imm_str.find("0x") == 0 || imm_str.find("0X") == 0) {
-                    // Hexadecimal format
-                    return std::stoi(imm_str, nullptr, 16);
-                } else {
-                    // Decimal format
-                    return std::stoi(imm_str);
-                }
-            } catch (const std::exception& e) {
-                throw std::runtime_error("Invalid immediate value: " + imm_str);
+        // Handle directives
+        if (inst == ".org") {
+            if (tokens.size() != 2) {
+                throw std::runtime_error(".org expects 1 argument, got " + std::to_string(tokens.size() - 1));
             }
-        };
+            unsigned long address = parseImmediate(tokens[1]);
+            if (address > 0xFFFFFFFF) {
+                throw std::runtime_error("Invalid .org address: " + tokens[1]);
+            }
+            currentPC = static_cast<int>(address);
+            currentAddress = static_cast<int>(address);
+            return binaryInstruction;
+        }
+        else if (inst == ".word") {
+            if (tokens.size() != 2) {
+                throw std::runtime_error(".word expects 1 argument, got " + std::to_string(tokens.size() - 1));
+            }
+            unsigned long value = parseImmediate(tokens[1]);
+            storeInMemory(static_cast<int>(value), 4, currentAddress);
+            binaryInstruction = to_bin(static_cast<int>(value), 32);
+            currentPC += 4;
+            return binaryInstruction;
+        }
+        else if (inst == ".half") {
+            if (tokens.size() != 2) {
+                throw std::runtime_error(".half expects 1 argument, got " + std::to_string(tokens.size() - 1));
+            }
+            unsigned long value = parseImmediate(tokens[1]);
+            if (value > 65535) {
+                throw std::runtime_error("Value out of range for .half: " + std::to_string(value));
+            }
+            storeInMemory(static_cast<int>(value), 2, currentAddress);
+            binaryInstruction = to_bin(static_cast<int>(value), 32);
+            currentPC += 2;
+            return binaryInstruction;
+        }
+        else if (inst == ".byte") {
+            if (tokens.size() != 2) {
+                throw std::runtime_error(".byte expects 1 argument, got " + std::to_string(tokens.size() - 1));
+            }
+            unsigned long value = parseImmediate(tokens[1]);
+            if (value > 255) {
+                throw std::runtime_error("Value out of range for .byte: " + std::to_string(value));
+            }
+            storeInMemory(static_cast<int>(value), 1, currentAddress);
+            binaryInstruction = to_bin(static_cast<int>(value), 32);
+            currentPC += 1;
+            return binaryInstruction;
+        }
+        else if (inst == ".align") {
+            if (tokens.size() != 2) {
+                throw std::runtime_error(".align expects 1 argument, got " + std::to_string(tokens.size() - 1));
+            }
+            unsigned long n = parseImmediate(tokens[1]);
+            if (n > 31) {
+                throw std::runtime_error("Invalid alignment value: " + tokens[1]);
+            }
+            int alignment = 1 << n;
+            int newAddress = ((currentPC + alignment - 1) / alignment) * alignment;
+            currentPC = newAddress;
+            currentAddress = newAddress;
+            return binaryInstruction;
+        }
+
+        // Handle regular instructions
+        InstrInfo info = instrMap[inst];
 
         if (inst == "add" || inst == "sub" || inst == "xor" || inst == "or" || inst == "and" ||
             inst == "sll" || inst == "srl" || inst == "sra" || inst == "slt" || inst == "sltu" ||
             inst == "mul" || inst == "mulh" || inst == "div" || inst == "rem") {
             if (tokens.size() != 4) {
-                throw std::runtime_error("Invalid number of tokens for R-type: " + std::to_string(tokens.size()));
+                throw std::runtime_error(inst + " expects 3 arguments (rd, rs1, rs2), got " + std::to_string(tokens.size() - 1));
             }
             int rd = regMap.at(tokens[1]);
             int rs1 = regMap.at(tokens[2]);
@@ -373,113 +531,114 @@ std::string MainWindow::assemble(const std::string& line, int currentPC) {
             std::string rs2_val = to_bin(rs2, 5);
 
             binaryInstruction = info.funct7 + rs2_val + rs1_val + info.funct3 + rd_val + info.opcode;
+            currentPC += 4;
         }
-        else if (inst == "addi" || inst == "lh" || inst == "lw" || inst == "jalr") {
-            if (tokens.size() != 3 && tokens.size() != 4) {
-                throw std::runtime_error("Invalid number of tokens for I-type: " + std::to_string(tokens.size()));
+        else if (inst == "addi") {
+            if (tokens.size() != 4) {
+                throw std::runtime_error("addi expects 3 arguments (rd, rs1, imm), got " + std::to_string(tokens.size() - 1));
             }
             int rd = regMap.at(tokens[1]);
-            std::string rs1_str, imm_str;
-            int rs1, imm;
+            int rs1 = regMap.at(tokens[2]);
+            unsigned long imm = parseImmediate(tokens[3]);
 
-            if (inst == "addi") {
-                if (tokens.size() != 4) {
-                    throw std::runtime_error("Invalid number of tokens for addi: " + std::to_string(tokens.size()));
-                }
-                rs1_str = tokens[2];
-                imm_str = tokens[3];
-                imm = parseImmediate(imm_str);
-                if (regMap.find(rs1_str) == regMap.end()) {
-                    throw std::runtime_error("Invalid register: " + rs1_str);
-                }
-                rs1 = regMap.at(rs1_str);
-            } else {
-                if (tokens.size() != 3) {
-                    throw std::runtime_error("Invalid number of tokens for load/jalr: " + std::to_string(tokens.size()));
-                }
-                std::string imm_rs1 = tokens[2];
-                size_t pos = imm_rs1.find('(');
-                if (pos == std::string::npos || pos == 0 || imm_rs1.back() != ')') {
-                    throw std::runtime_error("Invalid imm(rs1) format: " + imm_rs1);
-                }
-                imm_str = imm_rs1.substr(0, pos);
-                imm = parseImmediate(imm_str);
-                rs1_str = imm_rs1.substr(pos + 1, imm_rs1.length() - pos - 2);
-                if (regMap.find(rs1_str) == regMap.end()) {
-                    throw std::runtime_error("Invalid register: " + rs1_str);
-                }
-                rs1 = regMap.at(rs1_str);
+            if (imm > 2047 && imm <= 0xFFFFFFFF) imm = -(0x1000 - (imm & 0xFFF));
+            if (static_cast<int>(imm) < -2048 || static_cast<int>(imm) > 2047) {
+                throw std::runtime_error("Immediate value out of range for addi: " + std::to_string(imm));
             }
 
-            // Validate immediate value range for I-type (12-bit signed)
-            if (imm < -2048 || imm > 2047) {
-                throw std::runtime_error("Immediate value out of range for I-type: " + std::to_string(imm));
-            }
-
-            std::string imm_val = to_bin(imm, 12);
+            std::string imm_val = to_bin(static_cast<int>(imm), 12);
             std::string rs1_val = to_bin(rs1, 5);
             std::string rd_val = to_bin(rd, 5);
 
             binaryInstruction = imm_val + rs1_val + info.funct3 + rd_val + info.opcode;
+            currentPC += 4;
         }
-        else if (inst == "sh" || inst == "sw") {
+        else if (inst == "lh" || inst == "lw" || inst == "jalr") {
             if (tokens.size() != 3) {
-                throw std::runtime_error("Invalid number of tokens for S-type: " + std::to_string(tokens.size()));
+                throw std::runtime_error(inst + " expects 2 arguments (rd, imm(rs1)), got " + std::to_string(tokens.size() - 1));
             }
-            int rs2 = regMap.at(tokens[1]);
+            int rd = regMap.at(tokens[1]);
             std::string imm_rs1 = tokens[2];
-            int imm, rs1;
-
             size_t pos = imm_rs1.find('(');
             if (pos == std::string::npos || pos == 0 || imm_rs1.back() != ')') {
                 throw std::runtime_error("Invalid imm(rs1) format: " + imm_rs1);
             }
             std::string imm_str = imm_rs1.substr(0, pos);
-            imm = parseImmediate(imm_str);
+            unsigned long imm = parseImmediate(imm_str);
             std::string rs1_str = imm_rs1.substr(pos + 1, imm_rs1.length() - pos - 2);
             if (regMap.find(rs1_str) == regMap.end()) {
                 throw std::runtime_error("Invalid register: " + rs1_str);
             }
-            rs1 = regMap.at(rs1_str);
+            int rs1 = regMap.at(rs1_str);
 
-            // Validate immediate value range for S-type (12-bit signed)
-            if (imm < -2048 || imm > 2047) {
-                throw std::runtime_error("Immediate value out of range for S-type: " + std::to_string(imm));
+            if (static_cast<int>(imm) < -2048 || static_cast<int>(imm) > 2047) {
+                throw std::runtime_error("Immediate value out of range for " + inst + ": " + std::to_string(imm));
             }
 
-            std::string imm_val = to_bin(imm, 12);
+            std::string imm_val = to_bin(static_cast<int>(imm), 12);
+            std::string rs1_val = to_bin(rs1, 5);
+            std::string rd_val = to_bin(rd, 5);
+
+            binaryInstruction = imm_val + rs1_val + info.funct3 + rd_val + info.opcode;
+            currentPC += 4;
+        }
+        else if (inst == "sh" || inst == "sw") {
+            if (tokens.size() != 3) {
+                throw std::runtime_error(inst + " expects 2 arguments (rs2, imm(rs1)), got " + std::to_string(tokens.size() - 1));
+            }
+            int rs2 = regMap.at(tokens[1]);
+            std::string imm_rs1 = tokens[2];
+            size_t pos = imm_rs1.find('(');
+            if (pos == std::string::npos || pos == 0 || imm_rs1.back() != ')') {
+                throw std::runtime_error("Invalid imm(rs1) format: " + imm_rs1);
+            }
+            std::string imm_str = imm_rs1.substr(0, pos);
+            unsigned long imm = parseImmediate(imm_str);
+            std::string rs1_str = imm_rs1.substr(pos + 1, imm_rs1.length() - pos - 2);
+            if (regMap.find(rs1_str) == regMap.end()) {
+                throw std::runtime_error("Invalid register: " + rs1_str);
+            }
+            int rs1 = regMap.at(rs1_str);
+
+            if (static_cast<int>(imm) < -2048 || static_cast<int>(imm) > 2047) {
+                throw std::runtime_error("Immediate value out of range for " + inst + ": " + std::to_string(imm));
+            }
+
+            std::string imm_val = to_bin(static_cast<int>(imm), 12);
             std::string immHi = imm_val.substr(0, 7);
             std::string immLo = imm_val.substr(7, 5);
             std::string rs1_val = to_bin(rs1, 5);
             std::string rs2_val = to_bin(rs2, 5);
 
             binaryInstruction = immHi + rs2_val + rs1_val + info.funct3 + immLo + info.opcode;
+            currentPC += 4;
         }
         else if (inst == "beq" || inst == "bne" || inst == "blt" || inst == "bge" || inst == "bltu" || inst == "bgeu") {
             if (tokens.size() != 4) {
-                throw std::runtime_error("Invalid number of tokens for B-type: " + std::to_string(tokens.size()));
+                throw std::runtime_error(inst + " expects 3 arguments (rs1, rs2, label/imm), got " + std::to_string(tokens.size() - 1));
             }
-            int rs2 = regMap.at(tokens[1]);
-            int rs1 = regMap.at(tokens[2]);
+            int rs1 = regMap.at(tokens[1]);
+            int rs2 = regMap.at(tokens[2]);
             std::string target = tokens[3];
+            target.erase(std::remove_if(target.begin(), target.end(), ::isspace), target.end());
             int imm;
 
             if (isNumeric(target)) {
-                imm = parseImmediate(target);
+                imm = static_cast<int>(parseImmediate(target));
             } else {
                 if (symbolTable.find(target) == symbolTable.end()) {
                     throw std::runtime_error("Label not found: " + target);
                 }
                 int targetPC = symbolTable.at(target);
                 imm = targetPC - currentPC;
+                qDebug() << "beq: targetPC =" << targetPC << ", currentPC =" << currentPC << ", imm =" << imm;
             }
 
-            // Validate immediate value range for B-type (13-bit signed, must be multiple of 2)
             if (imm % 2 != 0) {
                 throw std::runtime_error("B-type immediate value must be a multiple of 2: " + std::to_string(imm));
             }
             if (imm < -4096 || imm > 4095) {
-                throw std::runtime_error("Immediate value out of range for B-type: " + std::to_string(imm));
+                throw std::runtime_error("Immediate value out of range for " + inst + ": " + std::to_string(imm));
             }
 
             std::string imm_val = to_bin(imm, 13);
@@ -491,17 +650,19 @@ std::string MainWindow::assemble(const std::string& line, int currentPC) {
             std::string imm11 = imm_val.substr(12, 1);
 
             binaryInstruction = imm12 + imm105 + rs2_val + rs1_val + info.funct3 + imm41 + imm11 + info.opcode;
+            currentPC += 4;
         }
         else if (inst == "jal") {
             if (tokens.size() != 3) {
-                throw std::runtime_error("Invalid number of tokens for J-type: " + std::to_string(tokens.size()));
+                throw std::runtime_error("jal expects 2 arguments (rd, label/imm), got " + std::to_string(tokens.size() - 1));
             }
             int rd = regMap.at(tokens[1]);
             std::string target = tokens[2];
+            target.erase(std::remove_if(target.begin(), target.end(), ::isspace), target.end());
             int imm;
 
             if (isNumeric(target)) {
-                imm = parseImmediate(target);
+                imm = static_cast<int>(parseImmediate(target));
             } else {
                 if (symbolTable.find(target) == symbolTable.end()) {
                     throw std::runtime_error("Label not found: " + target);
@@ -510,12 +671,11 @@ std::string MainWindow::assemble(const std::string& line, int currentPC) {
                 imm = targetPC - currentPC;
             }
 
-            // Validate immediate value range for J-type (20-bit signed, must be multiple of 2)
             if (imm % 2 != 0) {
                 throw std::runtime_error("JAL immediate value must be a multiple of 2: " + std::to_string(imm));
             }
             if (imm < -1048576 || imm > 1048575) {
-                throw std::runtime_error("Immediate value out of range for J-type: " + std::to_string(imm));
+                throw std::runtime_error("Immediate value out of range for jal: " + std::to_string(imm));
             }
 
             std::string imm_val = to_bin(imm, 20);
@@ -526,33 +686,31 @@ std::string MainWindow::assemble(const std::string& line, int currentPC) {
             std::string imm19_12 = imm_val.substr(12, 8);
 
             binaryInstruction = imm20 + imm10_1 + imm11 + imm19_12 + rd_val + info.opcode;
+            currentPC += 4;
         }
         else if (inst == "lui" || inst == "auipc") {
             if (tokens.size() != 3) {
-                throw std::runtime_error("Invalid number of tokens for U-type: " + std::to_string(tokens.size()));
+                throw std::runtime_error(inst + " expects 2 arguments (rd, imm), got " + std::to_string(tokens.size() - 1));
             }
             int rd = regMap.at(tokens[1]);
-            std::string imm_str = tokens[2];
-            int imm = parseImmediate(imm_str);
+            unsigned long imm = parseImmediate(tokens[2]);
 
-            // Validate immediate value range for U-type (20-bit)
-            if (imm < 0 || imm > 1048575) {
-                throw std::runtime_error("Immediate value out of range for U-type: " + std::to_string(imm));
+            if (imm > 1048575) {
+                throw std::runtime_error("Immediate value out of range for " + inst + ": " + std::to_string(imm));
             }
 
-            std::string imm_val = to_bin(imm, 20);
+            std::string imm_val = to_bin(static_cast<int>(imm), 20);
             std::string rd_val = to_bin(rd, 5);
 
             binaryInstruction = imm_val + rd_val + info.opcode;
+            currentPC += 4;
         }
     }
     catch (const std::exception& e) {
-        qDebug() << "Error in assembling:" << e.what();
-        QMessageBox::warning(this, "Assembly Error", QString("Error in line: %1\n%2").arg(QString::fromStdString(line), QString::fromStdString(e.what())));
-        return binaryInstruction;
+        throw std::runtime_error(e.what());
     }
 
-    if (binaryInstruction.length() != 32) {
+    if (binaryInstruction.length() != 32 && inst != ".word" && inst != ".half" && inst != ".byte") {
         if (binaryInstruction.length() > 32) {
             binaryInstruction = binaryInstruction.substr(binaryInstruction.length() - 32, 32);
         } else if (binaryInstruction.length() < 32) {
