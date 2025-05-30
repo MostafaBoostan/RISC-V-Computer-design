@@ -37,6 +37,7 @@ private:
     std::unordered_map<std::string, int> symbolTable;
     int registers[32] = {0};
 
+    bool isNumeric(const std::string& str);
     std::string to_bin(int val, int bits);
     std::vector<std::string> tokenize(const std::string& line);
     std::string assemble(const std::string& line, int currentPC);
@@ -98,6 +99,16 @@ MainWindow::~MainWindow() {
     delete ui;
 }
 
+bool MainWindow::isNumeric(const std::string& str) {
+    try {
+        size_t pos;
+        std::stoi(str, &pos);
+        return pos == str.length();
+    } catch (...) {
+        return false;
+    }
+}
+
 void MainWindow::parseLabels() {
     symbolTable.clear();
     QString fullText = ui->code_field->toPlainText();
@@ -139,7 +150,7 @@ void MainWindow::parseLabels() {
 
 void MainWindow::on_compile_btn_clicked() {
     if (isCompiling) {
-        qDebug() << "Compilation already in progress.";
+        qDebug() << "Compilation is in progress.";
         return;
     }
     isCompiling = true;
@@ -315,7 +326,7 @@ std::string MainWindow::assemble(const std::string& line, int currentPC) {
             inst == "sll" || inst == "srl" || inst == "sra" || inst == "slt" || inst == "sltu" ||
             inst == "mul" || inst == "mulh" || inst == "div" || inst == "rem") {
             if (tokens.size() != 4) {
-                qDebug() << "Invalid token count for R-type:" << tokens.size() << tokens;
+                qDebug() << "Invalid number of tokens for R-type:" << tokens.size() << tokens;
                 return binaryInstruction;
             }
             int rd = regMap.at(tokens[1]);
@@ -330,7 +341,7 @@ std::string MainWindow::assemble(const std::string& line, int currentPC) {
         }
         else if (inst == "addi" || inst == "lh" || inst == "lw" || inst == "jalr") {
             if (tokens.size() != 3 && tokens.size() != 4) {
-                qDebug() << "Invalid token count for I-type:" << tokens.size() << tokens;
+                qDebug() << "Invalid number of tokens for I-type:" << tokens.size() << tokens;
                 return binaryInstruction;
             }
             int rd = regMap.at(tokens[1]);
@@ -340,7 +351,7 @@ std::string MainWindow::assemble(const std::string& line, int currentPC) {
             if (inst == "addi") {
                 // For addi: expect tokens[2] = rs1, tokens[3] = imm
                 if (tokens.size() != 4) {
-                    qDebug() << "Invalid token count for addi:" << tokens.size() << tokens;
+                    qDebug() << "Invalid number of tokens for addi:" << tokens.size() << tokens;
                     return binaryInstruction;
                 }
                 rs1_str = tokens[2];
@@ -354,7 +365,7 @@ std::string MainWindow::assemble(const std::string& line, int currentPC) {
             } else {
                 // For lh, lw, jalr: expect tokens[2] = imm(rs1)
                 if (tokens.size() != 3) {
-                    qDebug() << "Invalid token count for load/jalr:" << tokens.size() << tokens;
+                    qDebug() << "Invalid number of tokens for load/jalr:" << tokens.size() << tokens;
                     return binaryInstruction;
                 }
                 std::string imm_rs1 = tokens[2];
@@ -381,7 +392,7 @@ std::string MainWindow::assemble(const std::string& line, int currentPC) {
         }
         else if (inst == "sh" || inst == "sw") {
             if (tokens.size() != 3) {
-                qDebug() << "Invalid token count for S-type:" << tokens.size() << tokens;
+                qDebug() << "Invalid number of tokens for S-type:" << tokens.size() << tokens;
                 return binaryInstruction;
             }
             int rs2 = regMap.at(tokens[1]);
@@ -412,7 +423,7 @@ std::string MainWindow::assemble(const std::string& line, int currentPC) {
         }
         else if (inst == "beq" || inst == "bne" || inst == "blt" || inst == "bge" || inst == "bltu" || inst == "bgeu") {
             if (tokens.size() != 4) {
-                qDebug() << "Invalid token count for B-type:" << tokens.size() << tokens;
+                qDebug() << "Invalid number of tokens for B-type:" << tokens.size() << tokens;
                 return binaryInstruction;
             }
             int rs2 = regMap.at(tokens[1]);
@@ -435,7 +446,7 @@ std::string MainWindow::assemble(const std::string& line, int currentPC) {
             std::string imm11 = imm_val.substr(12, 1);
 
             binaryInstruction = imm12 + imm105 + rs2_val + rs1_val + info.funct3 + imm41 + imm11 + info.opcode;
-            qDebug() << "Assembled B-type: imm12=" << QString::fromStdString(imm12)
+            qDebug() << "B-type instruction assembled: imm12=" << QString::fromStdString(imm12)
                      << " imm105=" << QString::fromStdString(imm105)
                      << " rs2_val=" << QString::fromStdString(rs2_val)
                      << " rs1_val=" << QString::fromStdString(rs1_val)
@@ -446,36 +457,66 @@ std::string MainWindow::assemble(const std::string& line, int currentPC) {
         }
         else if (inst == "jal") {
             if (tokens.size() != 3) {
-                qDebug() << "Invalid token count for J-type:" << tokens.size();
+                qDebug() << "Invalid number of tokens for J-type:" << tokens.size();
                 return binaryInstruction;
             }
             int rd = regMap.at(tokens[1]);
-            std::string label = tokens[2];
+            std::string target = tokens[2];
+            int imm;
 
-            if (symbolTable.find(label) == symbolTable.end()) {
-                qDebug() << "Label not found:" << QString::fromStdString(label);
+            if (isNumeric(target)) {
+                // Direct immediate value
+                imm = std::stoi(target);
+            } else {
+                // Label
+                if (symbolTable.find(target) == symbolTable.end()) {
+                    qDebug() << "Label not found:" << QString::fromStdString(target);
+                    return binaryInstruction;
+                }
+                int targetPC = symbolTable.at(target);
+                imm = targetPC - currentPC;
+            }
+
+            // Ensure immediate value is a multiple of 2 (RISC-V instruction alignment)
+            if (imm % 2 != 0) {
+                qDebug() << "JAL immediate value must be a multiple of 2:" << imm;
                 return binaryInstruction;
             }
 
-            int targetPC = symbolTable.at(label);
-            int imm = targetPC - currentPC;
-
-            std::string imm_val = to_bin(imm / 2, 21);
+            // Convert immediate to 20-bit binary
+            std::string imm_val = to_bin(imm, 20);
             std::string rd_val = to_bin(rd, 5);
-            std::string imm20 = imm_val.substr(0, 1);
-            std::string imm101 = imm_val.substr(1, 10);
-            std::string imm11 = imm_val.substr(11, 1);
-            std::string imm1912 = imm_val.substr(12, 8);
 
-            binaryInstruction = imm20 + imm101 + imm11 + imm1912 + rd_val + info.opcode;
+            // J-type immediate encoding: imm[20|10:1|11|19:12]
+            std::string imm20 = imm_val.substr(0, 1);        // imm[20]
+            std::string imm10_1 = imm_val.substr(1, 10);     // imm[10:1]
+            std::string imm11 = imm_val.substr(11, 1);       // imm[11]
+            std::string imm19_12 = imm_val.substr(12, 8);    // imm[19:12]
+
+            binaryInstruction = imm20 + imm10_1 + imm11 + imm19_12 + rd_val + info.opcode;
+
+            qDebug() << "J-type instruction assembled: imm20=" << QString::fromStdString(imm20)
+                     << " imm10_1=" << QString::fromStdString(imm10_1)
+                     << " imm11=" << QString::fromStdString(imm11)
+                     << " imm19_12=" << QString::fromStdString(imm19_12)
+                     << " rd_val=" << QString::fromStdString(rd_val)
+                     << " opcode=" << QString::fromStdString(info.opcode);
         }
         else if (inst == "lui" || inst == "auipc") {
             if (tokens.size() != 3) {
-                qDebug() << "Invalid token count for U-type:" << tokens.size();
+                qDebug() << "Invalid number of tokens for U-type:" << tokens.size();
                 return binaryInstruction;
             }
             int rd = regMap.at(tokens[1]);
-            int imm = std::stoi(tokens[2]);
+            std::string imm_str = tokens[2];
+            unsigned long imm;
+
+            // Check if the value is hexadecimal
+            if (imm_str.find("0x") == 0 || imm_str.find("0X") == 0) {
+                imm = std::stoul(imm_str, nullptr, 16); // Convert hexadecimal to number
+            } else {
+                imm = std::stoi(imm_str); // Convert decimal
+            }
 
             std::string imm_val = to_bin(imm, 20);
             std::string rd_val = to_bin(rd, 5);
@@ -484,7 +525,7 @@ std::string MainWindow::assemble(const std::string& line, int currentPC) {
         }
     }
     catch (const std::exception& e) {
-        qDebug() << "Exception:" << e.what();
+        qDebug() << "Error:" << e.what();
         return binaryInstruction;
     }
 
