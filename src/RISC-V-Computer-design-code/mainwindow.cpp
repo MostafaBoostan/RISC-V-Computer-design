@@ -21,6 +21,7 @@ private slots:
 
 private:
     Ui::MainWindow *ui;
+    bool isCompiling = false; // Prevent multiple compilations
 
     struct InstrInfo {
         std::string funct7;  // 7 bits
@@ -87,6 +88,9 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
         {"x30", 30}, {"x31", 31}
     };
 
+    // Disconnect any existing connections to avoid duplicates
+    disconnect(ui->compile_btn, &QPushButton::clicked, this, &MainWindow::on_compile_btn_clicked);
+    // Connect the signal to the slot
     connect(ui->compile_btn, &QPushButton::clicked, this, &MainWindow::on_compile_btn_clicked);
 }
 
@@ -106,18 +110,19 @@ void MainWindow::parseLabels() {
         trimmed_line.erase(std::remove_if(trimmed_line.begin(), trimmed_line.end(), ::isspace), trimmed_line.end());
         if (trimmed_line.empty()) continue;
 
-        size_t colon_pos = trimmed_line.find(':');
+        size_t colon_pos = line.find(':'); // Use original line for colon check
         if (colon_pos != std::string::npos) {
             std::string label = trimmed_line.substr(0, colon_pos);
             if (!label.empty()) {
                 symbolTable[label] = pc;
                 qDebug() << "Label found:" << QString::fromStdString(label) << "at address" << pc;
             }
-            if (colon_pos + 1 < trimmed_line.length()) {
+            if (colon_pos + 1 < line.length()) {
                 std::string remaining = line.substr(colon_pos + 1);
+                remaining.erase(0, remaining.find_first_not_of(" \t"));
                 std::vector<std::string> tokens = tokenize(remaining);
                 if (!tokens.empty() && instrMap.find(tokens[0]) != instrMap.end()) {
-                    pc += 4;
+                    pc += 4; // Increment PC for the instruction on the same line
                 }
             }
             continue;
@@ -133,6 +138,12 @@ void MainWindow::parseLabels() {
 }
 
 void MainWindow::on_compile_btn_clicked() {
+    if (isCompiling) {
+        qDebug() << "Compilation already in progress.";
+        return;
+    }
+    isCompiling = true;
+
     QString fullText = ui->code_field->toPlainText();
     QStringList lines = fullText.split("\n", Qt::SkipEmptyParts);
     QString output;
@@ -160,6 +171,8 @@ void MainWindow::on_compile_btn_clicked() {
     } else {
         QMessageBox::information(this, "Assembly Output", output);
     }
+
+    isCompiling = false;
 }
 
 std::string MainWindow::to_bin(int val, int bits) {
@@ -183,7 +196,6 @@ std::vector<std::string> MainWindow::tokenize(const std::string& line) {
     std::string token;
     bool inParentheses = false;
 
-
     std::string trimmed_line = line;
     trimmed_line.erase(0, trimmed_line.find_first_not_of(" \t"));
     trimmed_line.erase(trimmed_line.find_last_not_of(" \t") + 1);
@@ -191,13 +203,12 @@ std::vector<std::string> MainWindow::tokenize(const std::string& line) {
         return tokens;
     }
 
-
     size_t colon_pos = trimmed_line.find(':');
     if (colon_pos != std::string::npos) {
         std::string label = trimmed_line.substr(0, colon_pos);
         tokens.push_back(label + ":");
         if (colon_pos + 1 < trimmed_line.length()) {
-            trimmed_line = trimmed_line.substr(colon_pos + 1);
+            trimmed_line = line.substr(line.find(':') + 1); // Use original line to preserve whitespace
             trimmed_line.erase(0, trimmed_line.find_first_not_of(" \t"));
         } else {
             qDebug() << "Tokens for line:" << QString::fromStdString(line) << tokens.size() << tokens;
@@ -205,13 +216,11 @@ std::vector<std::string> MainWindow::tokenize(const std::string& line) {
         }
     }
 
-
     token.clear();
-    size_t i = 0;
     bool instruction_found = false;
+    size_t i = 0;
     for (const auto& instr : instrMap) {
         std::string inst = instr.first;
-        // بررسی دقیق‌تر برای اطمینان از تطبیق کامل دستور
         if (trimmed_line.length() >= inst.length() &&
             trimmed_line.substr(0, inst.length()) == inst &&
             (trimmed_line.length() == inst.length() ||
@@ -225,12 +234,12 @@ std::vector<std::string> MainWindow::tokenize(const std::string& line) {
     }
 
     if (!instruction_found) {
-
-        tokens.push_back(trimmed_line);
+        if (!trimmed_line.empty()) {
+            tokens.push_back(trimmed_line);
+        }
         qDebug() << "Tokens for line:" << QString::fromStdString(line) << tokens.size() << tokens;
         return tokens;
     }
-
 
     token.clear();
     bool expect_operand = true;
@@ -320,27 +329,49 @@ std::string MainWindow::assemble(const std::string& line, int currentPC) {
             binaryInstruction = info.funct7 + rs2_val + rs1_val + info.funct3 + rd_val + info.opcode;
         }
         else if (inst == "addi" || inst == "lh" || inst == "lw" || inst == "jalr") {
-            if (tokens.size() != 3) {
+            if (tokens.size() != 3 && tokens.size() != 4) {
                 qDebug() << "Invalid token count for I-type:" << tokens.size() << tokens;
                 return binaryInstruction;
             }
             int rd = regMap.at(tokens[1]);
-            std::string imm_rs1 = tokens[2];
-            int imm, rs1;
+            std::string rs1_str, imm_str;
+            int rs1, imm;
 
-            size_t pos = imm_rs1.find('(');
-            if (pos == std::string::npos || pos == 0 || imm_rs1.back() != ')') {
-                qDebug() << "Invalid imm(rs1) format:" << QString::fromStdString(imm_rs1);
-                return binaryInstruction;
+            if (inst == "addi") {
+                // For addi: expect tokens[2] = rs1, tokens[3] = imm
+                if (tokens.size() != 4) {
+                    qDebug() << "Invalid token count for addi:" << tokens.size() << tokens;
+                    return binaryInstruction;
+                }
+                rs1_str = tokens[2];
+                imm_str = tokens[3];
+                imm = std::stoi(imm_str);
+                if (regMap.find(rs1_str) == regMap.end()) {
+                    qDebug() << "Invalid register:" << QString::fromStdString(rs1_str);
+                    return binaryInstruction;
+                }
+                rs1 = regMap.at(rs1_str);
+            } else {
+                // For lh, lw, jalr: expect tokens[2] = imm(rs1)
+                if (tokens.size() != 3) {
+                    qDebug() << "Invalid token count for load/jalr:" << tokens.size() << tokens;
+                    return binaryInstruction;
+                }
+                std::string imm_rs1 = tokens[2];
+                size_t pos = imm_rs1.find('(');
+                if (pos == std::string::npos || pos == 0 || imm_rs1.back() != ')') {
+                    qDebug() << "Invalid imm(rs1) format:" << QString::fromStdString(imm_rs1);
+                    return binaryInstruction;
+                }
+                imm_str = imm_rs1.substr(0, pos);
+                imm = std::stoi(imm_str);
+                rs1_str = imm_rs1.substr(pos + 1, imm_rs1.length() - pos - 2);
+                if (regMap.find(rs1_str) == regMap.end()) {
+                    qDebug() << "Invalid register:" << QString::fromStdString(rs1_str);
+                    return binaryInstruction;
+                }
+                rs1 = regMap.at(rs1_str);
             }
-            std::string imm_str = imm_rs1.substr(0, pos);
-            imm = std::stoi(imm_str);
-            std::string rs1_str = imm_rs1.substr(pos + 1, imm_rs1.length() - pos - 2);
-            if (regMap.find(rs1_str) == regMap.end()) {
-                qDebug() << "Invalid register:" << QString::fromStdString(rs1_str);
-                return binaryInstruction;
-            }
-            rs1 = regMap.at(rs1_str);
 
             std::string imm_val = to_bin(imm, 12);
             std::string rs1_val = to_bin(rs1, 5);
