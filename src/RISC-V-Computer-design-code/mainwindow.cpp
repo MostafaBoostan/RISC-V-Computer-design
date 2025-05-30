@@ -89,9 +89,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
         {"x30", 30}, {"x31", 31}
     };
 
-    // Disconnect any existing connections to avoid duplicates
     disconnect(ui->compile_btn, &QPushButton::clicked, this, &MainWindow::on_compile_btn_clicked);
-    // Connect the signal to the slot
     connect(ui->compile_btn, &QPushButton::clicked, this, &MainWindow::on_compile_btn_clicked);
 }
 
@@ -100,6 +98,25 @@ MainWindow::~MainWindow() {
 }
 
 bool MainWindow::isNumeric(const std::string& str) {
+    if (str.empty()) return false;
+    if (str.find("0x") == 0 || str.find("0X") == 0) {
+        try {
+            size_t pos;
+            std::stoul(str, &pos, 16);
+            return pos == str.length();
+        } catch (...) {
+            return false;
+        }
+    }
+    if (str.find("0b") == 0 || str.find("0B") == 0) {
+        try {
+            size_t pos;
+            std::stoi(str.substr(2), &pos, 2);
+            return pos == str.length() - 2;
+        } catch (...) {
+            return false;
+        }
+    }
     try {
         size_t pos;
         std::stoi(str, &pos);
@@ -121,7 +138,7 @@ void MainWindow::parseLabels() {
         trimmed_line.erase(std::remove_if(trimmed_line.begin(), trimmed_line.end(), ::isspace), trimmed_line.end());
         if (trimmed_line.empty()) continue;
 
-        size_t colon_pos = line.find(':'); // Use original line for colon check
+        size_t colon_pos = line.find(':');
         if (colon_pos != std::string::npos) {
             std::string label = trimmed_line.substr(0, colon_pos);
             if (!label.empty()) {
@@ -133,7 +150,7 @@ void MainWindow::parseLabels() {
                 remaining.erase(0, remaining.find_first_not_of(" \t"));
                 std::vector<std::string> tokens = tokenize(remaining);
                 if (!tokens.empty() && instrMap.find(tokens[0]) != instrMap.end()) {
-                    pc += 4; // Increment PC for the instruction on the same line
+                    pc += 4;
                 }
             }
             continue;
@@ -219,7 +236,7 @@ std::vector<std::string> MainWindow::tokenize(const std::string& line) {
         std::string label = trimmed_line.substr(0, colon_pos);
         tokens.push_back(label + ":");
         if (colon_pos + 1 < trimmed_line.length()) {
-            trimmed_line = line.substr(line.find(':') + 1); // Use original line to preserve whitespace
+            trimmed_line = line.substr(line.find(':') + 1);
             trimmed_line.erase(0, trimmed_line.find_first_not_of(" \t"));
         } else {
             qDebug() << "Tokens for line:" << QString::fromStdString(line) << tokens.size() << tokens;
@@ -322,12 +339,30 @@ std::string MainWindow::assemble(const std::string& line, int currentPC) {
     InstrInfo info = instrMap[inst];
 
     try {
+        // Helper function to parse immediate values (Decimal, Hex, Binary)
+        auto parseImmediate = [](const std::string& imm_str) -> int {
+            try {
+                if (imm_str.find("0b") == 0 || imm_str.find("0B") == 0) {
+                    // Binary format
+                    std::string binary = imm_str.substr(2);
+                    return std::stoi(binary, nullptr, 2);
+                } else if (imm_str.find("0x") == 0 || imm_str.find("0X") == 0) {
+                    // Hexadecimal format
+                    return std::stoi(imm_str, nullptr, 16);
+                } else {
+                    // Decimal format
+                    return std::stoi(imm_str);
+                }
+            } catch (const std::exception& e) {
+                throw std::runtime_error("Invalid immediate value: " + imm_str);
+            }
+        };
+
         if (inst == "add" || inst == "sub" || inst == "xor" || inst == "or" || inst == "and" ||
             inst == "sll" || inst == "srl" || inst == "sra" || inst == "slt" || inst == "sltu" ||
             inst == "mul" || inst == "mulh" || inst == "div" || inst == "rem") {
             if (tokens.size() != 4) {
-                qDebug() << "Invalid number of tokens for R-type:" << tokens.size() << tokens;
-                return binaryInstruction;
+                throw std::runtime_error("Invalid number of tokens for R-type: " + std::to_string(tokens.size()));
             }
             int rd = regMap.at(tokens[1]);
             int rs1 = regMap.at(tokens[2]);
@@ -341,47 +376,44 @@ std::string MainWindow::assemble(const std::string& line, int currentPC) {
         }
         else if (inst == "addi" || inst == "lh" || inst == "lw" || inst == "jalr") {
             if (tokens.size() != 3 && tokens.size() != 4) {
-                qDebug() << "Invalid number of tokens for I-type:" << tokens.size() << tokens;
-                return binaryInstruction;
+                throw std::runtime_error("Invalid number of tokens for I-type: " + std::to_string(tokens.size()));
             }
             int rd = regMap.at(tokens[1]);
             std::string rs1_str, imm_str;
             int rs1, imm;
 
             if (inst == "addi") {
-                // For addi: expect tokens[2] = rs1, tokens[3] = imm
                 if (tokens.size() != 4) {
-                    qDebug() << "Invalid number of tokens for addi:" << tokens.size() << tokens;
-                    return binaryInstruction;
+                    throw std::runtime_error("Invalid number of tokens for addi: " + std::to_string(tokens.size()));
                 }
                 rs1_str = tokens[2];
                 imm_str = tokens[3];
-                imm = std::stoi(imm_str);
+                imm = parseImmediate(imm_str);
                 if (regMap.find(rs1_str) == regMap.end()) {
-                    qDebug() << "Invalid register:" << QString::fromStdString(rs1_str);
-                    return binaryInstruction;
+                    throw std::runtime_error("Invalid register: " + rs1_str);
                 }
                 rs1 = regMap.at(rs1_str);
             } else {
-                // For lh, lw, jalr: expect tokens[2] = imm(rs1)
                 if (tokens.size() != 3) {
-                    qDebug() << "Invalid number of tokens for load/jalr:" << tokens.size() << tokens;
-                    return binaryInstruction;
+                    throw std::runtime_error("Invalid number of tokens for load/jalr: " + std::to_string(tokens.size()));
                 }
                 std::string imm_rs1 = tokens[2];
                 size_t pos = imm_rs1.find('(');
                 if (pos == std::string::npos || pos == 0 || imm_rs1.back() != ')') {
-                    qDebug() << "Invalid imm(rs1) format:" << QString::fromStdString(imm_rs1);
-                    return binaryInstruction;
+                    throw std::runtime_error("Invalid imm(rs1) format: " + imm_rs1);
                 }
                 imm_str = imm_rs1.substr(0, pos);
-                imm = std::stoi(imm_str);
+                imm = parseImmediate(imm_str);
                 rs1_str = imm_rs1.substr(pos + 1, imm_rs1.length() - pos - 2);
                 if (regMap.find(rs1_str) == regMap.end()) {
-                    qDebug() << "Invalid register:" << QString::fromStdString(rs1_str);
-                    return binaryInstruction;
+                    throw std::runtime_error("Invalid register: " + rs1_str);
                 }
                 rs1 = regMap.at(rs1_str);
+            }
+
+            // Validate immediate value range for I-type (12-bit signed)
+            if (imm < -2048 || imm > 2047) {
+                throw std::runtime_error("Immediate value out of range for I-type: " + std::to_string(imm));
             }
 
             std::string imm_val = to_bin(imm, 12);
@@ -392,8 +424,7 @@ std::string MainWindow::assemble(const std::string& line, int currentPC) {
         }
         else if (inst == "sh" || inst == "sw") {
             if (tokens.size() != 3) {
-                qDebug() << "Invalid number of tokens for S-type:" << tokens.size() << tokens;
-                return binaryInstruction;
+                throw std::runtime_error("Invalid number of tokens for S-type: " + std::to_string(tokens.size()));
             }
             int rs2 = regMap.at(tokens[1]);
             std::string imm_rs1 = tokens[2];
@@ -401,17 +432,20 @@ std::string MainWindow::assemble(const std::string& line, int currentPC) {
 
             size_t pos = imm_rs1.find('(');
             if (pos == std::string::npos || pos == 0 || imm_rs1.back() != ')') {
-                qDebug() << "Invalid imm(rs1) format:" << QString::fromStdString(imm_rs1);
-                return binaryInstruction;
+                throw std::runtime_error("Invalid imm(rs1) format: " + imm_rs1);
             }
             std::string imm_str = imm_rs1.substr(0, pos);
-            imm = std::stoi(imm_str);
+            imm = parseImmediate(imm_str);
             std::string rs1_str = imm_rs1.substr(pos + 1, imm_rs1.length() - pos - 2);
             if (regMap.find(rs1_str) == regMap.end()) {
-                qDebug() << "Invalid register:" << QString::fromStdString(rs1_str);
-                return binaryInstruction;
+                throw std::runtime_error("Invalid register: " + rs1_str);
             }
             rs1 = regMap.at(rs1_str);
+
+            // Validate immediate value range for S-type (12-bit signed)
+            if (imm < -2048 || imm > 2047) {
+                throw std::runtime_error("Immediate value out of range for S-type: " + std::to_string(imm));
+            }
 
             std::string imm_val = to_bin(imm, 12);
             std::string immHi = imm_val.substr(0, 7);
@@ -423,21 +457,32 @@ std::string MainWindow::assemble(const std::string& line, int currentPC) {
         }
         else if (inst == "beq" || inst == "bne" || inst == "blt" || inst == "bge" || inst == "bltu" || inst == "bgeu") {
             if (tokens.size() != 4) {
-                qDebug() << "Invalid number of tokens for B-type:" << tokens.size() << tokens;
-                return binaryInstruction;
+                throw std::runtime_error("Invalid number of tokens for B-type: " + std::to_string(tokens.size()));
             }
             int rs2 = regMap.at(tokens[1]);
             int rs1 = regMap.at(tokens[2]);
-            std::string label = tokens[3];
+            std::string target = tokens[3];
+            int imm;
 
-            if (symbolTable.find(label) == symbolTable.end()) {
-                qDebug() << "Label not found:" << QString::fromStdString(label);
-                return binaryInstruction;
+            if (isNumeric(target)) {
+                imm = parseImmediate(target);
+            } else {
+                if (symbolTable.find(target) == symbolTable.end()) {
+                    throw std::runtime_error("Label not found: " + target);
+                }
+                int targetPC = symbolTable.at(target);
+                imm = targetPC - currentPC;
             }
 
-            int targetPC = symbolTable.at(label);
-            int imm = targetPC - currentPC;
-            std::string imm_val = to_bin(imm / 1, 13);
+            // Validate immediate value range for B-type (13-bit signed, must be multiple of 2)
+            if (imm % 2 != 0) {
+                throw std::runtime_error("B-type immediate value must be a multiple of 2: " + std::to_string(imm));
+            }
+            if (imm < -4096 || imm > 4095) {
+                throw std::runtime_error("Immediate value out of range for B-type: " + std::to_string(imm));
+            }
+
+            std::string imm_val = to_bin(imm, 13);
             std::string rs1_val = to_bin(rs1, 5);
             std::string rs2_val = to_bin(rs2, 5);
             std::string imm12 = imm_val.substr(0, 1);
@@ -446,76 +491,53 @@ std::string MainWindow::assemble(const std::string& line, int currentPC) {
             std::string imm11 = imm_val.substr(12, 1);
 
             binaryInstruction = imm12 + imm105 + rs2_val + rs1_val + info.funct3 + imm41 + imm11 + info.opcode;
-            qDebug() << "B-type instruction assembled: imm12=" << QString::fromStdString(imm12)
-                     << " imm105=" << QString::fromStdString(imm105)
-                     << " rs2_val=" << QString::fromStdString(rs2_val)
-                     << " rs1_val=" << QString::fromStdString(rs1_val)
-                     << " funct3=" << QString::fromStdString(info.funct3)
-                     << " imm41=" << QString::fromStdString(imm41)
-                     << " imm11=" << QString::fromStdString(imm11)
-                     << " opcode=" << QString::fromStdString(info.opcode);
         }
         else if (inst == "jal") {
             if (tokens.size() != 3) {
-                qDebug() << "Invalid number of tokens for J-type:" << tokens.size();
-                return binaryInstruction;
+                throw std::runtime_error("Invalid number of tokens for J-type: " + std::to_string(tokens.size()));
             }
             int rd = regMap.at(tokens[1]);
             std::string target = tokens[2];
             int imm;
 
             if (isNumeric(target)) {
-                // Direct immediate value
-                imm = std::stoi(target);
+                imm = parseImmediate(target);
             } else {
-                // Label
                 if (symbolTable.find(target) == symbolTable.end()) {
-                    qDebug() << "Label not found:" << QString::fromStdString(target);
-                    return binaryInstruction;
+                    throw std::runtime_error("Label not found: " + target);
                 }
                 int targetPC = symbolTable.at(target);
                 imm = targetPC - currentPC;
             }
 
-            // Ensure immediate value is a multiple of 2 (RISC-V instruction alignment)
+            // Validate immediate value range for J-type (20-bit signed, must be multiple of 2)
             if (imm % 2 != 0) {
-                qDebug() << "JAL immediate value must be a multiple of 2:" << imm;
-                return binaryInstruction;
+                throw std::runtime_error("JAL immediate value must be a multiple of 2: " + std::to_string(imm));
+            }
+            if (imm < -1048576 || imm > 1048575) {
+                throw std::runtime_error("Immediate value out of range for J-type: " + std::to_string(imm));
             }
 
-            // Convert immediate to 20-bit binary
             std::string imm_val = to_bin(imm, 20);
             std::string rd_val = to_bin(rd, 5);
-
-            // J-type immediate encoding: imm[20|10:1|11|19:12]
-            std::string imm20 = imm_val.substr(0, 1);        // imm[20]
-            std::string imm10_1 = imm_val.substr(1, 10);     // imm[10:1]
-            std::string imm11 = imm_val.substr(11, 1);       // imm[11]
-            std::string imm19_12 = imm_val.substr(12, 8);    // imm[19:12]
+            std::string imm20 = imm_val.substr(0, 1);
+            std::string imm10_1 = imm_val.substr(1, 10);
+            std::string imm11 = imm_val.substr(11, 1);
+            std::string imm19_12 = imm_val.substr(12, 8);
 
             binaryInstruction = imm20 + imm10_1 + imm11 + imm19_12 + rd_val + info.opcode;
-
-            qDebug() << "J-type instruction assembled: imm20=" << QString::fromStdString(imm20)
-                     << " imm10_1=" << QString::fromStdString(imm10_1)
-                     << " imm11=" << QString::fromStdString(imm11)
-                     << " imm19_12=" << QString::fromStdString(imm19_12)
-                     << " rd_val=" << QString::fromStdString(rd_val)
-                     << " opcode=" << QString::fromStdString(info.opcode);
         }
         else if (inst == "lui" || inst == "auipc") {
             if (tokens.size() != 3) {
-                qDebug() << "Invalid number of tokens for U-type:" << tokens.size();
-                return binaryInstruction;
+                throw std::runtime_error("Invalid number of tokens for U-type: " + std::to_string(tokens.size()));
             }
             int rd = regMap.at(tokens[1]);
             std::string imm_str = tokens[2];
-            unsigned long imm;
+            int imm = parseImmediate(imm_str);
 
-            // Check if the value is hexadecimal
-            if (imm_str.find("0x") == 0 || imm_str.find("0X") == 0) {
-                imm = std::stoul(imm_str, nullptr, 16); // Convert hexadecimal to number
-            } else {
-                imm = std::stoi(imm_str); // Convert decimal
+            // Validate immediate value range for U-type (20-bit)
+            if (imm < 0 || imm > 1048575) {
+                throw std::runtime_error("Immediate value out of range for U-type: " + std::to_string(imm));
             }
 
             std::string imm_val = to_bin(imm, 20);
@@ -525,7 +547,8 @@ std::string MainWindow::assemble(const std::string& line, int currentPC) {
         }
     }
     catch (const std::exception& e) {
-        qDebug() << "Error:" << e.what();
+        qDebug() << "Error in assembling:" << e.what();
+        QMessageBox::warning(this, "Assembly Error", QString("Error in line: %1\n%2").arg(QString::fromStdString(line), QString::fromStdString(e.what())));
         return binaryInstruction;
     }
 
