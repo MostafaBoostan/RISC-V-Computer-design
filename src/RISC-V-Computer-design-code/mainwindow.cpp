@@ -3,6 +3,7 @@
 #include <QPushButton>
 #include <QMessageBox>
 #include <QDebug>
+#include <QFile>
 #include <unordered_map>
 #include <vector>
 #include <string>
@@ -39,6 +40,8 @@ private:
     int registers[32] = {0};
     std::vector<uint8_t> memory;
     int currentAddress = 0;
+    // 32x2^16 memory array (32 bits wide, 2^16 depth)
+    std::vector<std::vector<uint8_t>> memoryArray;
 
     bool isNumeric(const std::string& str);
     std::string to_bin(int val, int bits);
@@ -48,6 +51,7 @@ private:
     void storeInMemory(int value, int size, int& address);
     int upper(long long imm);
     int lower(long long imm);
+    void saveToBinaryFile(const std::string& filename);
 };
 
 MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWindow) {
@@ -102,6 +106,8 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     };
 
     memory.resize(1024 * 1024, 0);
+    // Initialize 32x2^16 memory array (32 bits wide, 65536 depth)
+    memoryArray.resize(1 << 16, std::vector<uint8_t>(4, 0));
 
     disconnect(ui->compile_btn, &QPushButton::clicked, this, &MainWindow::on_compile_btn_clicked);
     connect(ui->compile_btn, &QPushButton::clicked, this, &MainWindow::on_compile_btn_clicked);
@@ -293,6 +299,26 @@ void MainWindow::storeInMemory(int value, int size, int& address) {
     address += size;
 }
 
+void MainWindow::saveToBinaryFile(const std::string& filename) {
+    QFile file(QString::fromStdString(filename));
+    if (!file.open(QIODevice::WriteOnly)) {
+        qDebug() << "Failed to open file for writing:" << QString::fromStdString(filename);
+        throw std::runtime_error("Failed to open file: " + filename);
+    }
+
+    // Write the memoryArray to the file
+    for (size_t i = 0; i < memoryArray.size(); ++i) {
+        const auto& word = memoryArray[i];
+        // Only write if the word is not all zeros
+        if (word[0] != 0 || word[1] != 0 || word[2] != 0 || word[3] != 0) {
+            file.write(reinterpret_cast<const char*>(word.data()), 4);
+        }
+    }
+
+    file.close();
+    qDebug() << "Binary file saved:" << QString::fromStdString(filename);
+}
+
 void MainWindow::on_compile_btn_clicked() {
     if (isCompiling) {
         qDebug() << "Compilation is in progress.";
@@ -304,6 +330,8 @@ void MainWindow::on_compile_btn_clicked() {
     QStringList lines = fullText.split("\n", Qt::SkipEmptyParts);
     QString output;
 
+    // Reset memory array
+    memoryArray.assign(1 << 16, std::vector<uint8_t>(4, 0));
     parseLabels();
 
     int pc = 0;
@@ -318,6 +346,7 @@ void MainWindow::on_compile_btn_clicked() {
         try {
             binaryInstruction = assemble(stdLine, pc);
             if (!binaryInstruction.empty()) {
+
                 std::vector<std::string> instructions;
                 size_t pos = 0;
                 std::string delimiter = "\n";
@@ -328,9 +357,12 @@ void MainWindow::on_compile_btn_clicked() {
                 if (!binaryInstruction.empty()) {
                     instructions.push_back(binaryInstruction);
                 }
+
                 for (const auto& instr : instructions) {
-                    output += QString::fromStdString(instr) + "\n";
-                    qDebug() << "Output for line:" << line << ": " << QString::fromStdString(instr);
+                    if (instr.length() == 32) {
+                        output += QString::fromStdString(instr) + "\n";
+                        qDebug() << "Output for line:" << line << ": " << QString::fromStdString(instr);
+                    }
                 }
             } else {
                 qDebug() << "No output for line:" << line;
@@ -339,6 +371,15 @@ void MainWindow::on_compile_btn_clicked() {
             output += QString("Error in line: %1\n%2\n").arg(line, QString::fromStdString(e.what()));
             qDebug() << "Error in line:" << line << ": " << QString::fromStdString(e.what());
         }
+    }
+
+    // Save to binary file
+    try {
+        saveToBinaryFile("output.bin");
+        output += "\nBinary file 'output.bin' generated successfully.\n";
+    } catch (const std::exception& e) {
+        output += QString("Error saving binary file: %1\n").arg(QString::fromStdString(e.what()));
+        qDebug() << "Error saving binary file:" << QString::fromStdString(e.what());
     }
 
     if (ui->output_field) {
@@ -577,6 +618,14 @@ std::string MainWindow::assemble(const std::string& line, int& currentPC) {
             long long value = parseImmediate(tokens[instruction_start + 1]);
             storeInMemory(static_cast<int>(value), 4, currentAddress);
             binaryInstruction = to_bin(static_cast<int>(value), 32);
+            if (currentAddress / 4 < (1 << 16)) {
+                memoryArray[currentAddress / 4][0] = static_cast<uint8_t>(value & 0xFF);
+                memoryArray[currentAddress / 4][1] = static_cast<uint8_t>((value >> 8) & 0xFF);
+                memoryArray[currentAddress / 4][2] = static_cast<uint8_t>((value >> 16) & 0xFF);
+                memoryArray[currentAddress / 4][3] = static_cast<uint8_t>((value >> 24) & 0xFF);
+            } else {
+                throw std::runtime_error("Memory address out of range for .word: " + std::to_string(currentAddress));
+            }
             currentPC += 4;
             return binaryInstruction;
         }
@@ -590,6 +639,12 @@ std::string MainWindow::assemble(const std::string& line, int& currentPC) {
             }
             storeInMemory(static_cast<int>(value), 2, currentAddress);
             binaryInstruction = to_bin(static_cast<int>(value), 16);
+            if (currentAddress / 4 < (1 << 16)) {
+                memoryArray[currentAddress / 4][0] = static_cast<uint8_t>(value & 0xFF);
+                memoryArray[currentAddress / 4][1] = static_cast<uint8_t>((value >> 8) & 0xFF);
+            } else {
+                throw std::runtime_error("Memory address out of range for .half: " + std::to_string(currentAddress));
+            }
             currentPC += 2;
             return binaryInstruction;
         }
@@ -603,6 +658,11 @@ std::string MainWindow::assemble(const std::string& line, int& currentPC) {
             }
             storeInMemory(static_cast<int>(value), 1, currentAddress);
             binaryInstruction = to_bin(static_cast<int>(value), 8);
+            if (currentAddress / 4 < (1 << 16)) {
+                memoryArray[currentAddress / 4][0] = static_cast<uint8_t>(value & 0xFF);
+            } else {
+                throw std::runtime_error("Memory address out of range for .byte: " + std::to_string(currentAddress));
+            }
             currentPC += 1;
             return binaryInstruction;
         }
@@ -631,6 +691,19 @@ std::string MainWindow::assemble(const std::string& line, int& currentPC) {
             std::string rs1_val = to_bin(0, 5);
             std::string imm_val = to_bin(0, 12);
             binaryInstruction = imm_val + rs1_val + "000" + rd_val + "0010011";
+            if (currentAddress / 4 < (1 << 16)) {
+                uint32_t value = 0;
+                for (char bit : binaryInstruction) {
+                    value = (value << 1) | (bit == '1' ? 1 : 0);
+                }
+                memoryArray[currentAddress / 4][0] = static_cast<uint8_t>(value & 0xFF);
+                memoryArray[currentAddress / 4][1] = static_cast<uint8_t>((value >> 8) & 0xFF);
+                memoryArray[currentAddress / 4][2] = static_cast<uint8_t>((value >> 16) & 0xFF);
+                memoryArray[currentAddress / 4][3] = static_cast<uint8_t>((value >> 24) & 0xFF);
+                currentAddress += 4;
+            } else {
+                throw std::runtime_error("Memory address out of range: " + std::to_string(currentAddress));
+            }
             currentPC += 4;
         }
         else if (inst == "li") {
@@ -645,6 +718,19 @@ std::string MainWindow::assemble(const std::string& line, int& currentPC) {
                 std::string imm_val = to_bin(static_cast<int>(imm), 12);
                 std::string rs1_val = to_bin(0, 5);
                 binaryInstruction = imm_val + rs1_val + "000" + rd_val + "0010011";
+                if (currentAddress / 4 < (1 << 16)) {
+                    uint32_t value = 0;
+                    for (char bit : binaryInstruction) {
+                        value = (value << 1) | (bit == '1' ? 1 : 0);
+                    }
+                    memoryArray[currentAddress / 4][0] = static_cast<uint8_t>(value & 0xFF);
+                    memoryArray[currentAddress / 4][1] = static_cast<uint8_t>((value >> 8) & 0xFF);
+                    memoryArray[currentAddress / 4][2] = static_cast<uint8_t>((value >> 16) & 0xFF);
+                    memoryArray[currentAddress / 4][3] = static_cast<uint8_t>((value >> 24) & 0xFF);
+                    currentAddress += 4;
+                } else {
+                    throw std::runtime_error("Memory address out of range: " + std::to_string(currentAddress));
+                }
                 currentPC += 4;
             } else {
                 int upper_bits = upper(imm);
@@ -655,6 +741,28 @@ std::string MainWindow::assemble(const std::string& line, int& currentPC) {
                 std::string rs1_val = rd_val;
                 std::string addi_instruction = addi_imm + rs1_val + "000" + rd_val + "0010011";
                 binaryInstruction = lui_instruction + "\n" + addi_instruction;
+                if (currentAddress / 4 < (1 << 16)) {
+                    uint32_t value = 0;
+                    for (char bit : lui_instruction) {
+                        value = (value << 1) | (bit == '1' ? 1 : 0);
+                    }
+                    memoryArray[currentAddress / 4][0] = static_cast<uint8_t>(value & 0xFF);
+                    memoryArray[currentAddress / 4][1] = static_cast<uint8_t>((value >> 8) & 0xFF);
+                    memoryArray[currentAddress / 4][2] = static_cast<uint8_t>((value >> 16) & 0xFF);
+                    memoryArray[currentAddress / 4][3] = static_cast<uint8_t>((value >> 24) & 0xFF);
+                    currentAddress += 4;
+                    value = 0;
+                    for (char bit : addi_instruction) {
+                        value = (value << 1) | (bit == '1' ? 1 : 0);
+                    }
+                    memoryArray[currentAddress / 4][0] = static_cast<uint8_t>(value & 0xFF);
+                    memoryArray[currentAddress / 4][1] = static_cast<uint8_t>((value >> 8) & 0xFF);
+                    memoryArray[currentAddress / 4][2] = static_cast<uint8_t>((value >> 16) & 0xFF);
+                    memoryArray[currentAddress / 4][3] = static_cast<uint8_t>((value >> 24) & 0xFF);
+                    currentAddress += 4;
+                } else {
+                    throw std::runtime_error("Memory address out of range: " + std::to_string(currentAddress));
+                }
                 currentPC += 8;
             }
         }
@@ -668,6 +776,19 @@ std::string MainWindow::assemble(const std::string& line, int& currentPC) {
             std::string rs1_val = to_bin(rs, 5);
             std::string imm_val = to_bin(0, 12);
             binaryInstruction = imm_val + rs1_val + "000" + rd_val + "0010011";
+            if (currentAddress / 4 < (1 << 16)) {
+                uint32_t value = 0;
+                for (char bit : binaryInstruction) {
+                    value = (value << 1) | (bit == '1' ? 1 : 0);
+                }
+                memoryArray[currentAddress / 4][0] = static_cast<uint8_t>(value & 0xFF);
+                memoryArray[currentAddress / 4][1] = static_cast<uint8_t>((value >> 8) & 0xFF);
+                memoryArray[currentAddress / 4][2] = static_cast<uint8_t>((value >> 16) & 0xFF);
+                memoryArray[currentAddress / 4][3] = static_cast<uint8_t>((value >> 24) & 0xFF);
+                currentAddress += 4;
+            } else {
+                throw std::runtime_error("Memory address out of range: " + std::to_string(currentAddress));
+            }
             currentPC += 4;
         }
         else if (inst == "not") {
@@ -680,6 +801,19 @@ std::string MainWindow::assemble(const std::string& line, int& currentPC) {
             std::string rs1_val = to_bin(rs, 5);
             std::string imm_val = to_bin(-1, 12);
             binaryInstruction = imm_val + rs1_val + "100" + rd_val + "0010011";
+            if (currentAddress / 4 < (1 << 16)) {
+                uint32_t value = 0;
+                for (char bit : binaryInstruction) {
+                    value = (value << 1) | (bit == '1' ? 1 : 0);
+                }
+                memoryArray[currentAddress / 4][0] = static_cast<uint8_t>(value & 0xFF);
+                memoryArray[currentAddress / 4][1] = static_cast<uint8_t>((value >> 8) & 0xFF);
+                memoryArray[currentAddress / 4][2] = static_cast<uint8_t>((value >> 16) & 0xFF);
+                memoryArray[currentAddress / 4][3] = static_cast<uint8_t>((value >> 24) & 0xFF);
+                currentAddress += 4;
+            } else {
+                throw std::runtime_error("Memory address out of range: " + std::to_string(currentAddress));
+            }
             currentPC += 4;
         }
         else if (inst == "neg") {
@@ -692,6 +826,19 @@ std::string MainWindow::assemble(const std::string& line, int& currentPC) {
             std::string rs1_val = to_bin(0, 5);
             std::string rs2_val = to_bin(rs, 5);
             binaryInstruction = "0100000" + rs2_val + rs1_val + "000" + rd_val + "0110011";
+            if (currentAddress / 4 < (1 << 16)) {
+                uint32_t value = 0;
+                for (char bit : binaryInstruction) {
+                    value = (value << 1) | (bit == '1' ? 1 : 0);
+                }
+                memoryArray[currentAddress / 4][0] = static_cast<uint8_t>(value & 0xFF);
+                memoryArray[currentAddress / 4][1] = static_cast<uint8_t>((value >> 8) & 0xFF);
+                memoryArray[currentAddress / 4][2] = static_cast<uint8_t>((value >> 16) & 0xFF);
+                memoryArray[currentAddress / 4][3] = static_cast<uint8_t>((value >> 24) & 0xFF);
+                currentAddress += 4;
+            } else {
+                throw std::runtime_error("Memory address out of range: " + std::to_string(currentAddress));
+            }
             currentPC += 4;
         }
         else if (inst == "add" || inst == "sub" || inst == "xor" || inst == "or" || inst == "and" ||
@@ -709,6 +856,19 @@ std::string MainWindow::assemble(const std::string& line, int& currentPC) {
             std::string rs2_val = to_bin(rs2, 5);
 
             binaryInstruction = info.funct7 + rs2_val + rs1_val + info.funct3 + rd_val + info.opcode;
+            if (currentAddress / 4 < (1 << 16)) {
+                uint32_t value = 0;
+                for (char bit : binaryInstruction) {
+                    value = (value << 1) | (bit == '1' ? 1 : 0);
+                }
+                memoryArray[currentAddress / 4][0] = static_cast<uint8_t>(value & 0xFF);
+                memoryArray[currentAddress / 4][1] = static_cast<uint8_t>((value >> 8) & 0xFF);
+                memoryArray[currentAddress / 4][2] = static_cast<uint8_t>((value >> 16) & 0xFF);
+                memoryArray[currentAddress / 4][3] = static_cast<uint8_t>((value >> 24) & 0xFF);
+                currentAddress += 4;
+            } else {
+                throw std::runtime_error("Memory address out of range: " + std::to_string(currentAddress));
+            }
             currentPC += 4;
         }
         else if (inst == "addi" || inst == "xori") {
@@ -728,6 +888,19 @@ std::string MainWindow::assemble(const std::string& line, int& currentPC) {
             std::string rd_val = to_bin(rd, 5);
 
             binaryInstruction = imm_val + rs1_val + info.funct3 + rd_val + info.opcode;
+            if (currentAddress / 4 < (1 << 16)) {
+                uint32_t value = 0;
+                for (char bit : binaryInstruction) {
+                    value = (value << 1) | (bit == '1' ? 1 : 0);
+                }
+                memoryArray[currentAddress / 4][0] = static_cast<uint8_t>(value & 0xFF);
+                memoryArray[currentAddress / 4][1] = static_cast<uint8_t>((value >> 8) & 0xFF);
+                memoryArray[currentAddress / 4][2] = static_cast<uint8_t>((value >> 16) & 0xFF);
+                memoryArray[currentAddress / 4][3] = static_cast<uint8_t>((value >> 24) & 0xFF);
+                currentAddress += 4;
+            } else {
+                throw std::runtime_error("Memory address out of range: " + std::to_string(currentAddress));
+            }
             currentPC += 4;
         }
         else if (inst == "lh" || inst == "lw" || inst == "jalr") {
@@ -757,6 +930,19 @@ std::string MainWindow::assemble(const std::string& line, int& currentPC) {
             std::string rd_val = to_bin(rd, 5);
 
             binaryInstruction = imm_val + rs1_val + info.funct3 + rd_val + info.opcode;
+            if (currentAddress / 4 < (1 << 16)) {
+                uint32_t value = 0;
+                for (char bit : binaryInstruction) {
+                    value = (value << 1) | (bit == '1' ? 1 : 0);
+                }
+                memoryArray[currentAddress / 4][0] = static_cast<uint8_t>(value & 0xFF);
+                memoryArray[currentAddress / 4][1] = static_cast<uint8_t>((value >> 8) & 0xFF);
+                memoryArray[currentAddress / 4][2] = static_cast<uint8_t>((value >> 16) & 0xFF);
+                memoryArray[currentAddress / 4][3] = static_cast<uint8_t>((value >> 24) & 0xFF);
+                currentAddress += 4;
+            } else {
+                throw std::runtime_error("Memory address out of range: " + std::to_string(currentAddress));
+            }
             currentPC += 4;
         }
         else if (inst == "sh" || inst == "sw") {
@@ -764,7 +950,7 @@ std::string MainWindow::assemble(const std::string& line, int& currentPC) {
                 throw std::runtime_error(inst + " expects 2 arguments (rs2, imm(rs1)), got " + std::to_string(tokens.size() - instruction_start - 1));
             }
             int rs2 = regMap.at(tokens[instruction_start + 1]);
-            std::string imm_rs1 = tokens[instruction_start + 2];
+            std::string imm_rs1 = (tokens[instruction_start + 2]);
             size_t pos = imm_rs1.find('(');
             if (pos == std::string::npos || pos == 0 || imm_rs1.back() != ')') {
                 throw std::runtime_error("Invalid imm(rs1) format: " + imm_rs1);
@@ -788,6 +974,19 @@ std::string MainWindow::assemble(const std::string& line, int& currentPC) {
             std::string rs2_val = to_bin(rs2, 5);
 
             binaryInstruction = immHi + rs2_val + rs1_val + info.funct3 + immLo + info.opcode;
+            if (currentAddress / 4 < (1 << 16)) {
+                uint32_t value = 0;
+                for (char bit : binaryInstruction) {
+                    value = (value << 1) | (bit == '1' ? 1 : 0);
+                }
+                memoryArray[currentAddress / 4][0] = static_cast<uint8_t>(value & 0xFF);
+                memoryArray[currentAddress / 4][1] = static_cast<uint8_t>((value >> 8) & 0xFF);
+                memoryArray[currentAddress / 4][2] = static_cast<uint8_t>((value >> 16) & 0xFF);
+                memoryArray[currentAddress / 4][3] = static_cast<uint8_t>((value >> 24) & 0xFF);
+                currentAddress += 4;
+            } else {
+                throw std::runtime_error("Memory address out of range: " + std::to_string(currentAddress));
+            }
             currentPC += 4;
         }
         else if (inst == "beq" || inst == "bne" || inst == "blt" || inst == "bge" || inst == "bltu" || inst == "bgeu") {
@@ -831,6 +1030,19 @@ std::string MainWindow::assemble(const std::string& line, int& currentPC) {
                      << ", imm11 = " << QString::fromStdString(imm11);
 
             binaryInstruction = imm12 + imm105 + rs2_val + rs1_val + info.funct3 + imm41 + imm11 + info.opcode;
+            if (currentAddress / 4 < (1 << 16)) {
+                uint32_t value = 0;
+                for (char bit : binaryInstruction) {
+                    value = (value << 1) | (bit == '1' ? 1 : 0);
+                }
+                memoryArray[currentAddress / 4][0] = static_cast<uint8_t>(value & 0xFF);
+                memoryArray[currentAddress / 4][1] = static_cast<uint8_t>((value >> 8) & 0xFF);
+                memoryArray[currentAddress / 4][2] = static_cast<uint8_t>((value >> 16) & 0xFF);
+                memoryArray[currentAddress / 4][3] = static_cast<uint8_t>((value >> 24) & 0xFF);
+                currentAddress += 4;
+            } else {
+                throw std::runtime_error("Memory address out of range: " + std::to_string(currentAddress));
+            }
             currentPC += 4;
         }
         else if (inst == "jal") {
@@ -867,6 +1079,19 @@ std::string MainWindow::assemble(const std::string& line, int& currentPC) {
             std::string imm19_12 = imm_val.substr(12, 8);
 
             binaryInstruction = imm20 + imm10_1 + imm11 + imm19_12 + rd_val + info.opcode;
+            if (currentAddress / 4 < (1 << 16)) {
+                uint32_t value = 0;
+                for (char bit : binaryInstruction) {
+                    value = (value << 1) | (bit == '1' ? 1 : 0);
+                }
+                memoryArray[currentAddress / 4][0] = static_cast<uint8_t>(value & 0xFF);
+                memoryArray[currentAddress / 4][1] = static_cast<uint8_t>((value >> 8) & 0xFF);
+                memoryArray[currentAddress / 4][2] = static_cast<uint8_t>((value >> 16) & 0xFF);
+                memoryArray[currentAddress / 4][3] = static_cast<uint8_t>((value >> 24) & 0xFF);
+                currentAddress += 4;
+            } else {
+                throw std::runtime_error("Memory address out of range: " + std::to_string(currentAddress));
+            }
             currentPC += 4;
         }
         else if (inst == "lui" || inst == "auipc") {
@@ -884,41 +1109,23 @@ std::string MainWindow::assemble(const std::string& line, int& currentPC) {
             std::string rd_val = to_bin(rd, 5);
 
             binaryInstruction = imm_val + rd_val + info.opcode;
+            if (currentAddress / 4 < (1 << 16)) {
+                uint32_t value = 0;
+                for (char bit : binaryInstruction) {
+                    value = (value << 1) | (bit == '1' ? 1 : 0);
+                }
+                memoryArray[currentAddress / 4][0] = static_cast<uint8_t>(value & 0xFF);
+                memoryArray[currentAddress / 4][1] = static_cast<uint8_t>((value >> 8) & 0xFF);
+                memoryArray[currentAddress / 4][2] = static_cast<uint8_t>((value >> 16) & 0xFF);
+                memoryArray[currentAddress / 4][3] = static_cast<uint8_t>((value >> 24) & 0xFF);
+                currentAddress += 4;
+            } else {
+                throw std::runtime_error("Memory address out of range: " + std::to_string(currentAddress));
+            }
             currentPC += 4;
         }
     } catch (const std::exception& e) {
         throw std::runtime_error(e.what());
-    }
-
-    if (!binaryInstruction.empty() && inst != ".org" && inst != ".align") {
-        std::vector<std::string> instructions;
-        size_t pos = 0;
-        std::string delimiter = "\n";
-        while ((pos = binaryInstruction.find(delimiter)) != std::string::npos) {
-            std::string instr = binaryInstruction.substr(0, pos);
-            if (instr.length() > 32) {
-                instr = instr.substr(0, 32);
-            } else if (instr.length() < 32) {
-                instr = std::string(32 - instr.length(), '0') + instr;
-            }
-            instructions.push_back(instr);
-            binaryInstruction.erase(0, pos + delimiter.length());
-        }
-        if (!binaryInstruction.empty()) {
-            if (binaryInstruction.length() > 32) {
-                binaryInstruction = binaryInstruction.substr(0, 32);
-            } else if (binaryInstruction.length() < 32) {
-                binaryInstruction = std::string(32 - binaryInstruction.length(), '0') + binaryInstruction;
-            }
-            instructions.push_back(binaryInstruction);
-        }
-        binaryInstruction.clear();
-        for (size_t i = 0; i < instructions.size(); ++i) {
-            binaryInstruction += instructions[i];
-            if (i < instructions.size() - 1) {
-                binaryInstruction += "\n";
-            }
-        }
     }
 
     return binaryInstruction;
