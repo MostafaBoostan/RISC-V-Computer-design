@@ -376,7 +376,7 @@ void MainWindow::on_compile_btn_clicked() {
     // Save to binary file
     try {
         saveToBinaryFile("output.bin");
-        output += "\nBinary file 'output.bin' generated successfully.\n";
+       // output += "\nBinary file 'output.bin' generated successfully.\n";
     } catch (const std::exception& e) {
         output += QString("Error saving binary file: %1\n").arg(QString::fromStdString(e.what()));
         qDebug() << "Error saving binary file:" << QString::fromStdString(e.what());
