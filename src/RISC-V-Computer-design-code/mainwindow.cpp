@@ -439,7 +439,7 @@ void MainWindow::on_compile_btn_clicked() {
     ui->general_table->setModel(generalModel);
 
     ui->general_table->verticalHeader()->setVisible(false);
-    ui->general_table->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    //ui->general_table->setEditTriggers(QAbstractItemView::NoEditTriggers);
 
     ui->general_table->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Fixed);
     ui->general_table->horizontalHeader()->resizeSection(0, 100);
@@ -1377,6 +1377,7 @@ void MainWindow::on_clock_btn_clicked()
             }
         }
 
+        //add
         if(FUNCT3 == "000" && FUNCT7 == "0000000"){
             int RS1_V = binaryToSignedInt(RS1);
             int RS2_V = binaryToSignedInt(RS2);
@@ -1397,6 +1398,7 @@ void MainWindow::on_clock_btn_clicked()
             SC_n = -1;
         }
 
+        //sub
         if(FUNCT3 == "000" && FUNCT7 == "0100000"){
             int RS1_V = binaryToSignedInt(RS1);
             int RS2_V = binaryToSignedInt(RS2);
@@ -1417,6 +1419,7 @@ void MainWindow::on_clock_btn_clicked()
             SC_n = -1;
         }
 
+        //xor
         if(FUNCT3 == "100" && FUNCT7 == "0000000"){
             QString binaryAnswer;
             int len = RS1.length();
@@ -1446,6 +1449,7 @@ void MainWindow::on_clock_btn_clicked()
             SC_n = -1;
         }
 
+        //or
         if(FUNCT3 == "110" && FUNCT7 == "0000000"){
             QString binaryAnswer;
             int len = RS1.length();
@@ -1475,6 +1479,7 @@ void MainWindow::on_clock_btn_clicked()
             SC_n = -1;
         }
 
+        //and
         if(FUNCT3 == "111" && FUNCT7 == "0000000"){
             QString binaryAnswer;
             int len = RS1.length();
@@ -1503,7 +1508,261 @@ void MainWindow::on_clock_btn_clicked()
 
             SC_n = -1;
         }
+
+        //sll
+        if(FUNCT3 == "001" && FUNCT7 == "0000000"){
+            QString RS2_5bits = RS2.mid(RS2.size() - 5, 5);
+            unsigned shiftAmount = RS2_5bits.toUInt(nullptr, 2);
+
+            int RS1_V = binaryToSignedInt(RS1);
+            int answer = RS1_V << shiftAmount;
+
+            QString binaryAnswer = QString("%1").arg(static_cast<quint32>(answer), 32, 2, QChar('0'));
+
+            for (int row = 0; row < generalModel->rowCount(); ++row) {
+                QString addrInTable = generalModel->item(row, 0)->text();
+                if (addrInTable == targetRegisterGAR) {
+                    QStandardItem* item = new QStandardItem(binaryAnswer);
+                    item->setTextAlignment(Qt::AlignCenter);
+                    generalModel->setItem(row, 1, item);
+
+                    break;
+                }
+            }
+
+            SC_n = -1;
+        }
+
+        //srl
+        if(FUNCT3 == "101" && FUNCT7 == "0000000"){
+            QString RS2_5bits = RS2.mid(RS2.size() - 5, 5);
+            unsigned shiftAmount = RS2_5bits.toUInt(nullptr, 2);
+
+            unsigned int RS1_V = RS1.toUInt(nullptr, 2);
+            unsigned int answer = RS1_V >> shiftAmount;
+
+            QString binaryAnswer = QString("%1").arg(static_cast<quint32>(answer), 32, 2, QChar('0'));
+            qDebug() << binaryAnswer;
+
+            for (int row = 0; row < generalModel->rowCount(); ++row) {
+                QString addrInTable = generalModel->item(row, 0)->text();
+                if (addrInTable == targetRegisterGAR) {
+                    QStandardItem* item = new QStandardItem(binaryAnswer);
+                    item->setTextAlignment(Qt::AlignCenter);
+                    generalModel->setItem(row, 1, item);
+
+                    break;
+                }
+            }
+
+            SC_n = -1;
+        }
+
+        //sra
+        if(FUNCT3 == "101" && FUNCT7 == "0100000"){
+            QString RS2_5bits = RS2.mid(RS2.size() - 5, 5);
+            unsigned int shiftAmount = RS2_5bits.toUInt(nullptr, 2);
+
+            int RS1_V = binaryToSignedInt(RS1);
+            int answer = RS1_V >> shiftAmount;
+
+            QString binaryAnswer = QString("%1").arg(static_cast<quint32>(answer), 32, 2, QChar('0'));
+
+            for (int row = 0; row < generalModel->rowCount(); ++row) {
+                QString addrInTable = generalModel->item(row, 0)->text();
+                if (addrInTable == targetRegisterGAR) {
+                    QStandardItem* item = new QStandardItem(binaryAnswer);
+                    item->setTextAlignment(Qt::AlignCenter);
+                    generalModel->setItem(row, 1, item);
+
+                    break;
+                }
+            }
+
+            SC_n = -1;
+        }
+
+        //mul
+        if(FUNCT3 == "000" && FUNCT7 == "0000001"){
+            int RS1_V = binaryToSignedInt(RS1);
+            int RS2_V = binaryToSignedInt(RS2);
+
+            qint64 fullResult = static_cast<qint64>(RS1_V) * static_cast<qint64>(RS2_V);
+
+            quint32 answer = static_cast<quint32>(fullResult & 0xFFFFFFFF);
+
+            QString binaryAnswer = QString("%1").arg(static_cast<quint32>(answer), 32, 2, QChar('0'));
+
+            for (int row = 0; row < generalModel->rowCount(); ++row) {
+                QString addrInTable = generalModel->item(row, 0)->text();
+                if (addrInTable == targetRegisterGAR) {
+                    QStandardItem* item = new QStandardItem(binaryAnswer);
+                    item->setTextAlignment(Qt::AlignCenter);
+                    generalModel->setItem(row, 1, item);
+
+                    break;
+                }
+            }
+
+            SC_n = -1;
+        }
+
+        //mulh
+        if(FUNCT3 == "001" && FUNCT7 == "0000001"){
+            int RS1_V = binaryToSignedInt(RS1);
+            int RS2_V = binaryToSignedInt(RS2);
+
+            qint64 fullResult = static_cast<qint64>(RS1_V) * static_cast<qint64>(RS2_V);
+
+            quint32 answer = static_cast<quint32>((fullResult >> 32) & 0xFFFFFFFF);
+
+            QString binaryAnswer = QString("%1").arg(static_cast<quint32>(answer), 32, 2, QChar('0'));
+
+            for (int row = 0; row < generalModel->rowCount(); ++row) {
+                QString addrInTable = generalModel->item(row, 0)->text();
+                if (addrInTable == targetRegisterGAR) {
+                    QStandardItem* item = new QStandardItem(binaryAnswer);
+                    item->setTextAlignment(Qt::AlignCenter);
+                    generalModel->setItem(row, 1, item);
+                    break;
+                }
+            }
+
+            SC_n = -1;
+        }
+
+        //div
+        if(FUNCT3 == "100" && FUNCT7 == "0000001"){
+            int RS1_V = binaryToSignedInt(RS1);
+            int RS2_V = binaryToSignedInt(RS2);
+            int answer;
+
+            if (RS2_V == 0){
+                answer = 0;
+            }
+            else{
+                answer = RS1_V / RS2_V;
+            }
+
+            QString binaryAnswer = QString("%1").arg(static_cast<quint32>(answer), 32, 2, QChar('0'));
+
+            for (int row = 0; row < generalModel->rowCount(); ++row) {
+                QString addrInTable = generalModel->item(row, 0)->text();
+                if (addrInTable == targetRegisterGAR) {
+                    QStandardItem* item = new QStandardItem(binaryAnswer);
+                    item->setTextAlignment(Qt::AlignCenter);
+                    generalModel->setItem(row, 1, item);
+
+                    break;
+                }
+            }
+
+            SC_n = -1;
+        }
+
+        //rem
+        if(FUNCT3 == "110" && FUNCT7 == "0000001"){
+            int RS1_V = binaryToSignedInt(RS1);
+            int RS2_V = binaryToSignedInt(RS2);
+            int answer;
+
+            if (RS2_V == 0){
+                answer = RS1_V;
+            }
+            else{
+                answer = RS1_V % RS2_V;
+            }
+
+            QString binaryAnswer = QString("%1").arg(static_cast<quint32>(answer), 32, 2, QChar('0'));
+
+            for (int row = 0; row < generalModel->rowCount(); ++row) {
+                QString addrInTable = generalModel->item(row, 0)->text();
+                if (addrInTable == targetRegisterGAR) {
+                    QStandardItem* item = new QStandardItem(binaryAnswer);
+                    item->setTextAlignment(Qt::AlignCenter);
+                    generalModel->setItem(row, 1, item);
+
+                    break;
+                }
+            }
+
+            SC_n = -1;
+        }
     }
+
+    if(UPCODE == R && SC_n == 5){
+        GAR = ui->gar_label->text();
+        IR = ui->ir_label->text();
+        FUNCT3 = ui->funct3_label->text();
+        FUNCT7 = ui->funct7_label->text();
+
+        QString RS1 = IR.mid(12,5);
+        QString RS2 = IR.mid(7,5);
+
+        int addr1 = RS1.toInt(nullptr, 2);
+        int addr2 = RS2.toInt(nullptr, 2);
+        int garIndex = GAR.toInt(nullptr, 2);
+
+        QString targetRegister1 = QString("x%1").arg(addr1);
+        QString targetRegister2 = QString("x%1").arg(addr2);
+        QString targetRegisterGAR = QString("x%1").arg(garIndex);
+
+        QStandardItemModel* generalModel = qobject_cast<QStandardItemModel*>(ui->general_table->model());
+
+        for (int row = 0; row < generalModel->rowCount(); ++row) {
+            QString addrInTable = generalModel->item(row, 0)->text();
+            if (addrInTable == targetRegister1) {
+                RS1 = generalModel->item(row, 1)->text();
+            }
+            if(addrInTable == targetRegister2){
+                RS2 = generalModel->item(row, 1)->text();
+            }
+        }
+
+        //slt
+        if(FUNCT3 == "010" && FUNCT7 == "0000000"){
+            int RS1_V = binaryToSignedInt(RS1);
+            int RS2_V = binaryToSignedInt(RS2);
+
+            int answer = RS1_V < RS2_V ? 1 : 0;
+            QString binaryAnswer = QString("%1").arg(static_cast<quint32>(answer), 32, 2, QChar('0'));
+
+            for (int row = 0; row < generalModel->rowCount(); ++row) {
+                QString addrInTable = generalModel->item(row, 0)->text();
+                if (addrInTable == targetRegisterGAR) {
+                    QStandardItem* item = new QStandardItem(binaryAnswer);
+                    item->setTextAlignment(Qt::AlignCenter);
+                    generalModel->setItem(row, 1, item);
+
+                    break;
+                }
+            }
+
+            SC_n = -1;
+        }
+
+        //sltu
+        if(FUNCT3 == "011" && FUNCT7 == "0000000"){
+            unsigned RS1_V = RS1.toUInt(nullptr, 2);
+            unsigned RS2_V = RS2.toUInt(nullptr, 2);
+            int answer = RS1_V < RS2_V ? 1 : 0;
+            QString binaryAnswer = QString("%1").arg(static_cast<quint32>(answer), 32, 2, QChar('0'));
+
+            for (int row = 0; row < generalModel->rowCount(); ++row) {
+                QString addrInTable = generalModel->item(row, 0)->text();
+                if (addrInTable == targetRegisterGAR) {
+                    QStandardItem* item = new QStandardItem(binaryAnswer);
+                    item->setTextAlignment(Qt::AlignCenter);
+                    generalModel->setItem(row, 1, item);
+
+                    break;
+                }
+            }
+
+            SC_n = -1;
+        }
+    }
+
 }
 
 
