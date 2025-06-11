@@ -33,6 +33,26 @@ class Ui_MainWindow
 public:
     QWidget *centralwidget;
     QGridLayout *gridLayout_3;
+    QVBoxLayout *verticalLayout_2;
+    QLabel *label_5;
+    QTableView *ram_table;
+    QHBoxLayout *horizontalLayout;
+    QPushButton *compile_btn;
+    QPushButton *load_btn;
+    QPushButton *run_btn;
+    QPushButton *stop_btn;
+    QPushButton *reset_btn;
+    QPushButton *clock_btn;
+    QSpacerItem *verticalSpacer_5;
+    QVBoxLayout *verticalLayout;
+    QLabel *label;
+    QTextEdit *code_field;
+    QLabel *label_2;
+    QPlainTextEdit *console_field;
+    QLabel *label_3;
+    QTextEdit *input_field;
+    QLabel *label_7;
+    QPlainTextEdit *output_field;
     QVBoxLayout *verticalLayout_3;
     QLabel *label_8;
     QSpacerItem *horizontalSpacer;
@@ -62,24 +82,11 @@ public:
     QSpacerItem *verticalSpacer_4;
     QLabel *label_4;
     QTableView *general_table;
-    QVBoxLayout *verticalLayout;
-    QLabel *label;
-    QTextEdit *code_field;
-    QLabel *label_2;
-    QPlainTextEdit *console_field;
-    QLabel *label_3;
-    QTextEdit *input_field;
-    QLabel *label_7;
-    QPlainTextEdit *output_field;
-    QVBoxLayout *verticalLayout_2;
-    QLabel *label_5;
-    QTableView *ram_table;
-    QHBoxLayout *horizontalLayout;
-    QPushButton *compile_btn;
-    QPushButton *run_btn;
-    QPushButton *reset_btn;
-    QPushButton *clock_btn;
-    QSpacerItem *verticalSpacer_5;
+    QHBoxLayout *horizontalLayout_2;
+    QLabel *label_10;
+    QTextEdit *clock_field;
+    QLabel *label_11;
+    QSpacerItem *horizontalSpacer_2;
     QMenuBar *menubar;
     QStatusBar *statusbar;
 
@@ -92,6 +99,125 @@ public:
         centralwidget->setObjectName("centralwidget");
         gridLayout_3 = new QGridLayout(centralwidget);
         gridLayout_3->setObjectName("gridLayout_3");
+        verticalLayout_2 = new QVBoxLayout();
+        verticalLayout_2->setObjectName("verticalLayout_2");
+        label_5 = new QLabel(centralwidget);
+        label_5->setObjectName("label_5");
+
+        verticalLayout_2->addWidget(label_5, 0, Qt::AlignHCenter);
+
+        ram_table = new QTableView(centralwidget);
+        ram_table->setObjectName("ram_table");
+        ram_table->setTabletTracking(false);
+        ram_table->horizontalHeader()->setCascadingSectionResizes(true);
+
+        verticalLayout_2->addWidget(ram_table);
+
+
+        gridLayout_3->addLayout(verticalLayout_2, 2, 2, 1, 1);
+
+        horizontalLayout = new QHBoxLayout();
+        horizontalLayout->setObjectName("horizontalLayout");
+        compile_btn = new QPushButton(centralwidget);
+        compile_btn->setObjectName("compile_btn");
+        compile_btn->setMinimumSize(QSize(0, 35));
+        compile_btn->setCursor(QCursor(Qt::PointingHandCursor));
+
+        horizontalLayout->addWidget(compile_btn);
+
+        load_btn = new QPushButton(centralwidget);
+        load_btn->setObjectName("load_btn");
+        load_btn->setMinimumSize(QSize(0, 35));
+        load_btn->setCursor(QCursor(Qt::PointingHandCursor));
+
+        horizontalLayout->addWidget(load_btn);
+
+        run_btn = new QPushButton(centralwidget);
+        run_btn->setObjectName("run_btn");
+        run_btn->setMinimumSize(QSize(0, 35));
+        run_btn->setCursor(QCursor(Qt::PointingHandCursor));
+
+        horizontalLayout->addWidget(run_btn);
+
+        stop_btn = new QPushButton(centralwidget);
+        stop_btn->setObjectName("stop_btn");
+        stop_btn->setMinimumSize(QSize(0, 35));
+        stop_btn->setCursor(QCursor(Qt::PointingHandCursor));
+
+        horizontalLayout->addWidget(stop_btn);
+
+        reset_btn = new QPushButton(centralwidget);
+        reset_btn->setObjectName("reset_btn");
+        reset_btn->setMinimumSize(QSize(0, 35));
+        reset_btn->setCursor(QCursor(Qt::PointingHandCursor));
+
+        horizontalLayout->addWidget(reset_btn);
+
+        clock_btn = new QPushButton(centralwidget);
+        clock_btn->setObjectName("clock_btn");
+        clock_btn->setMinimumSize(QSize(0, 35));
+        clock_btn->setCursor(QCursor(Qt::PointingHandCursor));
+
+        horizontalLayout->addWidget(clock_btn);
+
+
+        gridLayout_3->addLayout(horizontalLayout, 0, 0, 1, 3);
+
+        verticalSpacer_5 = new QSpacerItem(40, 20, QSizePolicy::Expanding, QSizePolicy::Minimum);
+
+        gridLayout_3->addItem(verticalSpacer_5, 1, 2, 1, 1);
+
+        verticalLayout = new QVBoxLayout();
+        verticalLayout->setObjectName("verticalLayout");
+        label = new QLabel(centralwidget);
+        label->setObjectName("label");
+
+        verticalLayout->addWidget(label, 0, Qt::AlignHCenter|Qt::AlignVCenter);
+
+        code_field = new QTextEdit(centralwidget);
+        code_field->setObjectName("code_field");
+        code_field->setMinimumSize(QSize(0, 200));
+
+        verticalLayout->addWidget(code_field);
+
+        label_2 = new QLabel(centralwidget);
+        label_2->setObjectName("label_2");
+
+        verticalLayout->addWidget(label_2, 0, Qt::AlignHCenter);
+
+        console_field = new QPlainTextEdit(centralwidget);
+        console_field->setObjectName("console_field");
+        console_field->setMaximumSize(QSize(16777215, 50));
+        console_field->setReadOnly(true);
+
+        verticalLayout->addWidget(console_field);
+
+        label_3 = new QLabel(centralwidget);
+        label_3->setObjectName("label_3");
+
+        verticalLayout->addWidget(label_3, 0, Qt::AlignHCenter);
+
+        input_field = new QTextEdit(centralwidget);
+        input_field->setObjectName("input_field");
+        input_field->setMaximumSize(QSize(16777215, 50));
+
+        verticalLayout->addWidget(input_field);
+
+        label_7 = new QLabel(centralwidget);
+        label_7->setObjectName("label_7");
+
+        verticalLayout->addWidget(label_7, 0, Qt::AlignHCenter);
+
+        output_field = new QPlainTextEdit(centralwidget);
+        output_field->setObjectName("output_field");
+        output_field->setMaximumSize(QSize(16777215, 50));
+        output_field->setReadOnly(true);
+
+        verticalLayout->addWidget(output_field);
+
+
+        gridLayout_3->addLayout(verticalLayout, 2, 0, 1, 1);
+
         verticalLayout_3 = new QVBoxLayout();
         verticalLayout_3->setObjectName("verticalLayout_3");
         label_8 = new QLabel(centralwidget);
@@ -295,110 +421,30 @@ public:
 
         gridLayout_3->addLayout(verticalLayout_3, 2, 1, 1, 1);
 
-        verticalLayout = new QVBoxLayout();
-        verticalLayout->setObjectName("verticalLayout");
-        label = new QLabel(centralwidget);
-        label->setObjectName("label");
+        horizontalLayout_2 = new QHBoxLayout();
+        horizontalLayout_2->setObjectName("horizontalLayout_2");
+        label_10 = new QLabel(centralwidget);
+        label_10->setObjectName("label_10");
 
-        verticalLayout->addWidget(label, 0, Qt::AlignHCenter|Qt::AlignVCenter);
+        horizontalLayout_2->addWidget(label_10);
 
-        code_field = new QTextEdit(centralwidget);
-        code_field->setObjectName("code_field");
-        code_field->setMinimumSize(QSize(0, 200));
+        clock_field = new QTextEdit(centralwidget);
+        clock_field->setObjectName("clock_field");
+        clock_field->setMaximumSize(QSize(100, 30));
 
-        verticalLayout->addWidget(code_field);
+        horizontalLayout_2->addWidget(clock_field);
 
-        label_2 = new QLabel(centralwidget);
-        label_2->setObjectName("label_2");
+        label_11 = new QLabel(centralwidget);
+        label_11->setObjectName("label_11");
 
-        verticalLayout->addWidget(label_2, 0, Qt::AlignHCenter);
+        horizontalLayout_2->addWidget(label_11);
 
-        console_field = new QPlainTextEdit(centralwidget);
-        console_field->setObjectName("console_field");
-        console_field->setMaximumSize(QSize(16777215, 50));
-        console_field->setReadOnly(true);
+        horizontalSpacer_2 = new QSpacerItem(40, 20, QSizePolicy::Expanding, QSizePolicy::Minimum);
 
-        verticalLayout->addWidget(console_field);
-
-        label_3 = new QLabel(centralwidget);
-        label_3->setObjectName("label_3");
-
-        verticalLayout->addWidget(label_3, 0, Qt::AlignHCenter);
-
-        input_field = new QTextEdit(centralwidget);
-        input_field->setObjectName("input_field");
-        input_field->setMaximumSize(QSize(16777215, 50));
-
-        verticalLayout->addWidget(input_field);
-
-        label_7 = new QLabel(centralwidget);
-        label_7->setObjectName("label_7");
-
-        verticalLayout->addWidget(label_7, 0, Qt::AlignHCenter);
-
-        output_field = new QPlainTextEdit(centralwidget);
-        output_field->setObjectName("output_field");
-        output_field->setMaximumSize(QSize(16777215, 50));
-        output_field->setReadOnly(true);
-
-        verticalLayout->addWidget(output_field);
+        horizontalLayout_2->addItem(horizontalSpacer_2);
 
 
-        gridLayout_3->addLayout(verticalLayout, 2, 0, 1, 1);
-
-        verticalLayout_2 = new QVBoxLayout();
-        verticalLayout_2->setObjectName("verticalLayout_2");
-        label_5 = new QLabel(centralwidget);
-        label_5->setObjectName("label_5");
-
-        verticalLayout_2->addWidget(label_5, 0, Qt::AlignHCenter);
-
-        ram_table = new QTableView(centralwidget);
-        ram_table->setObjectName("ram_table");
-        ram_table->setTabletTracking(false);
-        ram_table->horizontalHeader()->setCascadingSectionResizes(true);
-
-        verticalLayout_2->addWidget(ram_table);
-
-
-        gridLayout_3->addLayout(verticalLayout_2, 2, 2, 1, 1);
-
-        horizontalLayout = new QHBoxLayout();
-        horizontalLayout->setObjectName("horizontalLayout");
-        compile_btn = new QPushButton(centralwidget);
-        compile_btn->setObjectName("compile_btn");
-        compile_btn->setMinimumSize(QSize(0, 35));
-        compile_btn->setCursor(QCursor(Qt::PointingHandCursor));
-
-        horizontalLayout->addWidget(compile_btn);
-
-        run_btn = new QPushButton(centralwidget);
-        run_btn->setObjectName("run_btn");
-        run_btn->setMinimumSize(QSize(0, 35));
-        run_btn->setCursor(QCursor(Qt::PointingHandCursor));
-
-        horizontalLayout->addWidget(run_btn);
-
-        reset_btn = new QPushButton(centralwidget);
-        reset_btn->setObjectName("reset_btn");
-        reset_btn->setMinimumSize(QSize(0, 35));
-        reset_btn->setCursor(QCursor(Qt::PointingHandCursor));
-
-        horizontalLayout->addWidget(reset_btn);
-
-        clock_btn = new QPushButton(centralwidget);
-        clock_btn->setObjectName("clock_btn");
-        clock_btn->setMinimumSize(QSize(0, 35));
-        clock_btn->setCursor(QCursor(Qt::PointingHandCursor));
-
-        horizontalLayout->addWidget(clock_btn);
-
-
-        gridLayout_3->addLayout(horizontalLayout, 0, 0, 1, 3);
-
-        verticalSpacer_5 = new QSpacerItem(40, 20, QSizePolicy::Expanding, QSizePolicy::Minimum);
-
-        gridLayout_3->addItem(verticalSpacer_5, 1, 0, 1, 1);
+        gridLayout_3->addLayout(horizontalLayout_2, 1, 0, 1, 1);
 
         MainWindow->setCentralWidget(centralwidget);
         menubar = new QMenuBar(MainWindow);
@@ -417,6 +463,17 @@ public:
     void retranslateUi(QMainWindow *MainWindow)
     {
         MainWindow->setWindowTitle(QCoreApplication::translate("MainWindow", "MainWindow", nullptr));
+        label_5->setText(QCoreApplication::translate("MainWindow", "RAM", nullptr));
+        compile_btn->setText(QCoreApplication::translate("MainWindow", "Compile", nullptr));
+        load_btn->setText(QCoreApplication::translate("MainWindow", "Load", nullptr));
+        run_btn->setText(QCoreApplication::translate("MainWindow", "Run", nullptr));
+        stop_btn->setText(QCoreApplication::translate("MainWindow", "Stop", nullptr));
+        reset_btn->setText(QCoreApplication::translate("MainWindow", "Reset", nullptr));
+        clock_btn->setText(QCoreApplication::translate("MainWindow", "Clock", nullptr));
+        label->setText(QCoreApplication::translate("MainWindow", "Code", nullptr));
+        label_2->setText(QCoreApplication::translate("MainWindow", " Console ", nullptr));
+        label_3->setText(QCoreApplication::translate("MainWindow", "Input", nullptr));
+        label_7->setText(QCoreApplication::translate("MainWindow", "Output", nullptr));
         label_8->setText(QCoreApplication::translate("MainWindow", "Special purpose", nullptr));
         label_29->setText(QCoreApplication::translate("MainWindow", "OUTR", nullptr));
         label_9->setText(QCoreApplication::translate("MainWindow", "PC", nullptr));
@@ -441,15 +498,8 @@ public:
         label_6->setText(QCoreApplication::translate("MainWindow", "MAR", nullptr));
         label_14->setText(QCoreApplication::translate("MainWindow", "IMM", nullptr));
         label_4->setText(QCoreApplication::translate("MainWindow", "General purpose", nullptr));
-        label->setText(QCoreApplication::translate("MainWindow", "Code", nullptr));
-        label_2->setText(QCoreApplication::translate("MainWindow", " Console ", nullptr));
-        label_3->setText(QCoreApplication::translate("MainWindow", "Input", nullptr));
-        label_7->setText(QCoreApplication::translate("MainWindow", "Output", nullptr));
-        label_5->setText(QCoreApplication::translate("MainWindow", "RAM", nullptr));
-        compile_btn->setText(QCoreApplication::translate("MainWindow", "Compile", nullptr));
-        run_btn->setText(QCoreApplication::translate("MainWindow", "Run", nullptr));
-        reset_btn->setText(QCoreApplication::translate("MainWindow", "Reset", nullptr));
-        clock_btn->setText(QCoreApplication::translate("MainWindow", "Clock", nullptr));
+        label_10->setText(QCoreApplication::translate("MainWindow", "Clock to run :", nullptr));
+        label_11->setText(QCoreApplication::translate("MainWindow", "ms", nullptr));
     } // retranslateUi
 
 };

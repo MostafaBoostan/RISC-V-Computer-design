@@ -38,11 +38,16 @@ private slots:
 
     void on_reset_btn_clicked();
 
+    void on_stop_btn_clicked();
+
+    void on_load_btn_clicked();
+
 private:
     Ui::MainWindow *ui;
     bool isCompiling = false;
 
     int SC_n = 0;
+    int stopflag;
 
     struct InstrInfo {
         std::string funct7;

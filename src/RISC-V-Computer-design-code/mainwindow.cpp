@@ -11,6 +11,8 @@
 #include <cctype>
 #include <QStandardItem>
 #include <QString>
+#include <QTime>
+#include <QCoreApplication>
 #include <math.h>
 #include "ui_mainwindow.h"
 #include "mainwindow.h"
@@ -358,95 +360,6 @@ void MainWindow::on_compile_btn_clicked() {
 
     isCompiling = false;
     ui->compile_btn->setEnabled(true);
-
-    // Load binary data and show in ram_table
-    QFile file("output.bin");
-    if (!file.open(QIODevice::ReadOnly)) {
-        qDebug() << "Failed to open output.bin";
-        return;
-    }
-
-    QByteArray binaryData = file.readAll();
-    file.close();
-
-    const int maxAddress = 0xFFFF + 1;
-
-    QStandardItemModel* model = new QStandardItemModel();
-    model->setRowCount(maxAddress);
-    model->setColumnCount(2);
-
-    model->setHeaderData(0, Qt::Horizontal, "Address");
-    model->setHeaderData(1, Qt::Horizontal, "Binary Data");
-
-    for (int i = 0; i < maxAddress; ++i) {
-        QString binStr;
-
-        if (i < binaryData.size()) {
-            uint8_t byte = static_cast<uint8_t>(binaryData[i]);
-            for (int bit = 7; bit >= 0; --bit) {
-                binStr += ((byte & (1 << bit)) ? '1' : '0');
-            }
-        } else {
-            binStr = "00000000";
-        }
-
-        QString addrStr = QString("0x%1").arg(i, 4, 16, QLatin1Char('0'));
-
-        QStandardItem* addrItem = new QStandardItem(addrStr);
-        addrItem->setTextAlignment(Qt::AlignCenter);
-
-        QStandardItem* binItem = new QStandardItem(binStr);
-        binItem->setTextAlignment(Qt::AlignCenter);
-
-        model->setItem(i, 0, addrItem);
-        model->setItem(i, 1, binItem);
-    }
-
-    ui->ram_table->setModel(model);
-    ui->ram_table->verticalHeader()->setVisible(false);
-    ui->ram_table->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-
-    ui->ram_table->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Fixed);
-    ui->ram_table->horizontalHeader()->resizeSection(0, 100);
-    ui->ram_table->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
-
-    //ui->ram_table->setEditTriggers(QAbstractItemView::NoEditTriggers);
-
-
-    //general purpose set
-    QStandardItemModel* generalModel = new QStandardItemModel();
-    generalModel->setRowCount(32);
-    generalModel->setColumnCount(2);
-
-    generalModel->setHeaderData(0, Qt::Horizontal, "Address");
-    generalModel->setHeaderData(1, Qt::Horizontal, "Binary Data");
-
-    for (int i = 0; i < 32; ++i) {
-        QString addrStr = QString("x%1").arg(i, 0, 10);
-
-        QString binStr = QString("00000000000000000000000000000000"); // 32 بیت صفر
-
-        QStandardItem* addrItem = new QStandardItem(addrStr);
-        addrItem->setTextAlignment(Qt::AlignCenter);
-
-        QStandardItem* binItem = new QStandardItem(binStr);
-        binItem->setTextAlignment(Qt::AlignCenter);
-
-        generalModel->setItem(i, 0, addrItem);
-        generalModel->setItem(i, 1, binItem);
-    }
-
-    ui->general_table->setModel(generalModel);
-
-    ui->general_table->verticalHeader()->setVisible(false);
-    //ui->general_table->setEditTriggers(QAbstractItemView::NoEditTriggers);
-
-    ui->general_table->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Fixed);
-    ui->general_table->horizontalHeader()->resizeSection(0, 100);
-
-    ui->general_table->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
-    ui->general_table->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-
 }
 
 std::string MainWindow::to_bin(int val, int bits) {
@@ -1207,7 +1120,26 @@ std::string MainWindow::assemble(const std::string& line, int& currentPC) {
 
 void MainWindow::on_run_btn_clicked()
 {
+    QStandardItemModel* modell = qobject_cast<QStandardItemModel*>(ui->ram_table->model());
+    if (!modell || modell->rowCount() == 0) {
+        return;
+    }
 
+    stopflag = 0;
+    QString clock = ui->clock_field->toPlainText();
+    if(clock == ""){
+        clock = "1000";
+        ui->clock_field->setPlainText("1000");
+    }
+
+    int delayMs = clock.toInt();
+    while(stopflag == 0){
+        on_clock_btn_clicked();
+        QTime endTime = QTime::currentTime().addMSecs(delayMs);
+        while (QTime::currentTime() < endTime) {
+            QCoreApplication::processEvents(QEventLoop::AllEvents, 1);
+        }
+    }
 }
 
 int MainWindow::binaryToSignedInt(const QString& binStr) {
@@ -1237,6 +1169,11 @@ void MainWindow::on_clock_btn_clicked()
     QString PC, MAR, IR, UPCODE, FUNCT3, GAR, FUNCT7;
     static int Z = 0,P = 0,N = 0;
     QString SC = ui->sc_label->text();
+
+    QStandardItemModel* modell = qobject_cast<QStandardItemModel*>(ui->ram_table->model());
+    if (!modell || modell->rowCount() == 0) {
+        return;
+    }
 
     if(SC == "\\- \\- \\-"){
         SC_n = -1;
@@ -2370,5 +2307,103 @@ void MainWindow::on_reset_btn_clicked()
     ui->sc_label->setText("\\- \\- \\-");
     ui->inpr_label->setText("00000000000000000000000000000000");
     ui->outr_label->setText("00000000000000000000000000000000");
+}
+
+
+void MainWindow::on_stop_btn_clicked()
+{
+    stopflag = 1;
+}
+
+
+void MainWindow::on_load_btn_clicked()
+{
+    // Load binary data and show in ram_table
+    QFile file("output.bin");
+    if (!file.open(QIODevice::ReadOnly)) {
+        qDebug() << "Failed to open output.bin";
+        return;
+    }
+
+    QByteArray binaryData = file.readAll();
+    file.close();
+
+    const int maxAddress = 0xFFFF + 1;
+
+    QStandardItemModel* model = new QStandardItemModel();
+    model->setRowCount(maxAddress);
+    model->setColumnCount(2);
+
+    model->setHeaderData(0, Qt::Horizontal, "Address");
+    model->setHeaderData(1, Qt::Horizontal, "Binary Data");
+
+    for (int i = 0; i < maxAddress; ++i) {
+        QString binStr;
+
+        if (i < binaryData.size()) {
+            uint8_t byte = static_cast<uint8_t>(binaryData[i]);
+            for (int bit = 7; bit >= 0; --bit) {
+                binStr += ((byte & (1 << bit)) ? '1' : '0');
+            }
+        } else {
+            binStr = "00000000";
+        }
+
+        QString addrStr = QString("0x%1").arg(i, 4, 16, QLatin1Char('0'));
+
+        QStandardItem* addrItem = new QStandardItem(addrStr);
+        addrItem->setTextAlignment(Qt::AlignCenter);
+
+        QStandardItem* binItem = new QStandardItem(binStr);
+        binItem->setTextAlignment(Qt::AlignCenter);
+
+        model->setItem(i, 0, addrItem);
+        model->setItem(i, 1, binItem);
+    }
+
+    ui->ram_table->setModel(model);
+    ui->ram_table->verticalHeader()->setVisible(false);
+    ui->ram_table->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+
+    ui->ram_table->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Fixed);
+    ui->ram_table->horizontalHeader()->resizeSection(0, 100);
+    ui->ram_table->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
+
+    ui->ram_table->setEditTriggers(QAbstractItemView::NoEditTriggers);
+
+
+    //general purpose set
+    QStandardItemModel* generalModel = new QStandardItemModel();
+    generalModel->setRowCount(32);
+    generalModel->setColumnCount(2);
+
+    generalModel->setHeaderData(0, Qt::Horizontal, "Address");
+    generalModel->setHeaderData(1, Qt::Horizontal, "Binary Data");
+
+    for (int i = 0; i < 32; ++i) {
+        QString addrStr = QString("x%1").arg(i, 0, 10);
+
+        QString binStr = QString("00000000000000000000000000000000"); // 32 بیت صفر
+
+        QStandardItem* addrItem = new QStandardItem(addrStr);
+        addrItem->setTextAlignment(Qt::AlignCenter);
+
+        QStandardItem* binItem = new QStandardItem(binStr);
+        binItem->setTextAlignment(Qt::AlignCenter);
+
+        generalModel->setItem(i, 0, addrItem);
+        generalModel->setItem(i, 1, binItem);
+    }
+
+    ui->general_table->setModel(generalModel);
+
+    ui->general_table->verticalHeader()->setVisible(false);
+    ui->general_table->setEditTriggers(QAbstractItemView::NoEditTriggers);
+
+    ui->general_table->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Fixed);
+    ui->general_table->horizontalHeader()->resizeSection(0, 100);
+
+    ui->general_table->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
+    ui->general_table->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
 }
 
