@@ -1235,6 +1235,7 @@ int MainWindow::binaryToSignedInt(const QString& binStr) {
 void MainWindow::on_clock_btn_clicked()
 {
     QString PC, MAR, IR, UPCODE, FUNCT3, GAR, FUNCT7;
+    static int Z = 0,P = 0,N = 0;
     QString SC = ui->sc_label->text();
 
     if(SC == "\\- \\- \\-"){
@@ -2056,7 +2057,172 @@ void MainWindow::on_clock_btn_clicked()
 
     }
 
+    if(UPCODE == B && (SC_n == 4 || SC_n == 5)){
+        IR = ui->ir_label->text();
+        FUNCT3 = ui->funct3_label->text();
+        PC = ui->pc_label->text();
+        QString IMM = ui->imm_label->text();
 
+        QString RS1 = IR.mid(12,5);
+        QString RS2 = IR.mid(7,5);
+
+        int addr1 = RS1.toInt(nullptr, 2);
+        int addr2 = RS2.toInt(nullptr, 2);
+
+        QString targetRegister1 = QString("x%1").arg(addr1);
+        QString targetRegister2 = QString("x%1").arg(addr2);
+
+        QStandardItemModel* generalModel = qobject_cast<QStandardItemModel*>(ui->general_table->model());
+
+        for (int row = 0; row < generalModel->rowCount(); ++row) {
+            QString addrInTable = generalModel->item(row, 0)->text();
+            if (addrInTable == targetRegister1) {
+                RS1 = generalModel->item(row, 1)->text();
+            }
+            if(addrInTable == targetRegister2){
+                RS2 = generalModel->item(row, 1)->text();
+            }
+        }
+
+        if((FUNCT3 == "000" || FUNCT3 == "001" || FUNCT3 == "100" || FUNCT3 == "101") && SC_n == 4){
+            int RS1_V = binaryToSignedInt(RS1);
+            int RS2_V = binaryToSignedInt(RS2);
+            int answer = RS1_V - RS2_V ;
+
+            if(answer > 0){
+                P = 1;
+            }
+            else{
+                P = 0;
+            }
+
+            if(answer < 0){
+                N = 1;
+            }
+            else{
+                N = 0;
+            }
+
+            if(answer == 0){
+                Z = 1;
+            }
+            else{
+                Z = 0;
+            }
+        }
+
+        if((FUNCT3 == "110" || FUNCT3 == "111") && SC_n == 4){
+            quint32 RS1_V = RS1.toUInt(nullptr, 2);
+            quint32 RS2_V = RS2.toUInt(nullptr, 2);
+
+            int answer = RS1_V - RS2_V ;
+
+            if(answer > 0){
+                P = 1;
+            }
+            else{
+                P = 0;
+            }
+
+            if(answer < 0){
+                N = 1;
+            }
+            else{
+                N = 0;
+            }
+
+            if(answer == 0){
+                Z = 1;
+            }
+            else{
+                Z = 0;
+            }
+        }
+
+        //beq
+        if(FUNCT3 == "000" && Z == 1 && SC_n == 5){
+            quint16 PC_V = PC.toUInt(nullptr, 2);
+            quint16 IMM_V = IMM.toUInt(nullptr, 2);
+            quint32 sum = static_cast<quint32>(PC_V) + static_cast<quint32>(IMM_V);
+            quint16 answer = static_cast<quint16>(sum);
+
+            QString binaryAnswer = QString("%1").arg(answer, 16, 2, QChar('0'));
+
+            ui->pc_label->setText(binaryAnswer);
+
+            SC_n = -1;
+        }
+
+        //bne
+        if(FUNCT3 == "001" && Z == 0 && SC_n == 5){
+            quint16 PC_V = PC.toUInt(nullptr, 2);
+            quint16 IMM_V = IMM.toUInt(nullptr, 2);
+            quint32 sum = static_cast<quint32>(PC_V) + static_cast<quint32>(IMM_V);
+            quint16 answer = static_cast<quint16>(sum);
+
+            QString binaryAnswer = QString("%1").arg(answer, 16, 2, QChar('0'));
+
+            ui->pc_label->setText(binaryAnswer);
+
+            SC_n = -1;
+        }
+
+        //blt
+        if(FUNCT3 == "100" && N == 1 && SC_n == 5){
+            quint16 PC_V = PC.toUInt(nullptr, 2);
+            quint16 IMM_V = IMM.toUInt(nullptr, 2);
+            quint32 sum = static_cast<quint32>(PC_V) + static_cast<quint32>(IMM_V);
+            quint16 answer = static_cast<quint16>(sum);
+
+            QString binaryAnswer = QString("%1").arg(answer, 16, 2, QChar('0'));
+
+            ui->pc_label->setText(binaryAnswer);
+
+            SC_n = -1;
+        }
+
+        //bge
+        if(FUNCT3 == "101" && N == 0 && SC_n == 5){
+            quint16 PC_V = PC.toUInt(nullptr, 2);
+            quint16 IMM_V = IMM.toUInt(nullptr, 2);
+            quint32 sum = static_cast<quint32>(PC_V) + static_cast<quint32>(IMM_V);
+            quint16 answer = static_cast<quint16>(sum);
+
+            QString binaryAnswer = QString("%1").arg(answer, 16, 2, QChar('0'));
+
+            ui->pc_label->setText(binaryAnswer);
+
+            SC_n = -1;
+        }
+
+        //bltu
+        if(FUNCT3 == "110" && N == 1 && SC_n == 5){
+            quint16 PC_V = PC.toUInt(nullptr, 2);
+            quint16 IMM_V = IMM.toUInt(nullptr, 2);
+            quint32 sum = static_cast<quint32>(PC_V) + static_cast<quint32>(IMM_V);
+            quint16 answer = static_cast<quint16>(sum);
+
+            QString binaryAnswer = QString("%1").arg(answer, 16, 2, QChar('0'));
+
+            ui->pc_label->setText(binaryAnswer);
+
+            SC_n = -1;
+        }
+
+        //bgeu
+        if(FUNCT3 == "111" && N == 0 && SC_n == 5){
+            quint16 PC_V = PC.toUInt(nullptr, 2);
+            quint16 IMM_V = IMM.toUInt(nullptr, 2);
+            quint32 sum = static_cast<quint32>(PC_V) + static_cast<quint32>(IMM_V);
+            quint16 answer = static_cast<quint16>(sum);
+
+            QString binaryAnswer = QString("%1").arg(answer, 16, 2, QChar('0'));
+
+            ui->pc_label->setText(binaryAnswer);
+
+            SC_n = -1;
+        }
+    }
 }
 
 
