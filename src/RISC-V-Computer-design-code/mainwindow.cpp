@@ -1930,6 +1930,133 @@ void MainWindow::on_clock_btn_clicked()
 
     }
 
+    if(UPCODE == S && (SC_n == 4 || SC_n == 5)){
+        IR = ui->ir_label->text();
+        FUNCT3 = ui->funct3_label->text();
+        QString IMM = ui->imm_label->text();
+        QString RS1 = IR.mid(12,5);
+        QString RS2 = IR.mid(7,5);
+
+        int addr1 = RS1.toInt(nullptr, 2);
+        int addr2 = RS2.toInt(nullptr, 2);
+
+        QString targetRegister1 = QString("x%1").arg(addr1);
+        QString targetRegister2 = QString("x%1").arg(addr2);
+
+        QStandardItemModel* generalModel = qobject_cast<QStandardItemModel*>(ui->general_table->model());
+
+        for (int row = 0; row < generalModel->rowCount(); ++row) {
+            QString addrInTable = generalModel->item(row, 0)->text();
+            if (addrInTable == targetRegister1) {
+                RS1 = generalModel->item(row, 1)->text();
+            }
+            if(addrInTable == targetRegister2){
+                RS2 = generalModel->item(row, 1)->text();
+            }
+        }
+
+        if(SC_n == 4){
+            int IMM_V = binaryToSignedInt(IMM);
+            int RS1_V = binaryToSignedInt(RS1);
+            int address = RS1_V + IMM_V;
+
+            quint16 address_16bit = static_cast<quint16>(address);
+
+            QString binaryAnswer = QString("%1").arg(address_16bit, 16, 2, QChar('0'));
+
+            ui->mar_label->setText(binaryAnswer);
+        }
+
+        //sh
+        if(FUNCT3 == "001" && SC_n == 5){
+            MAR = ui->mar_label->text();
+            quint16 MAR_addr = MAR.toUInt(nullptr, 2);
+
+            quint32 RS2_val = RS2.toUInt(nullptr, 2);
+
+            quint8 low_byte = RS2_val & 0xFF;          // [7:0]
+            quint8 high_byte = (RS2_val >> 8) & 0xFF;  // [15:8]
+
+            QString addr0 = QString("0x%1").arg(MAR_addr, 4, 16, QLatin1Char('0')).toLower();
+            QString addr1 = QString("0x%1").arg(MAR_addr + 1, 4, 16, QLatin1Char('0')).toLower();
+
+            QStandardItemModel* ramModel = qobject_cast<QStandardItemModel*>(ui->ram_table->model());
+
+            for (int row = 0; row < ramModel->rowCount(); ++row) {
+                QString rowAddr = ramModel->item(row, 0)->text().toLower();
+
+                if (rowAddr == addr0) {
+                    QString val = QString("%1").arg(low_byte, 8, 2, QLatin1Char('0')).toLower();
+                    QStandardItem* item = new QStandardItem(val);
+                    item->setTextAlignment(Qt::AlignCenter);
+                    ramModel->setItem(row, 1, item);
+                }
+
+                if (rowAddr == addr1) {
+                    QString val = QString("%1").arg(high_byte, 8, 2, QLatin1Char('0')).toLower();
+                    QStandardItem* item = new QStandardItem(val);
+                    item->setTextAlignment(Qt::AlignCenter);
+                    ramModel->setItem(row, 1, item);
+                }
+            }
+
+            SC_n = -1;
+        }
+
+        //sw
+        if (FUNCT3 == "010" && SC_n == 5) {
+            MAR = ui->mar_label->text();
+            quint16 MAR_addr = MAR.toUInt(nullptr, 2);
+
+            quint32 RS2_val = RS2.toUInt(nullptr, 2);
+
+            quint8 byte0 = (RS2_val) & 0xFF;         // [7:0]
+            quint8 byte1 = (RS2_val >> 8) & 0xFF;    // [15:8]
+            quint8 byte2 = (RS2_val >> 16) & 0xFF;   // [23:16]
+            quint8 byte3 = (RS2_val >> 24) & 0xFF;   // [31:24]
+
+            QString addr0 = QString("0x%1").arg(MAR_addr, 4, 16, QLatin1Char('0')).toLower();
+            QString addr1 = QString("0x%1").arg(MAR_addr + 1, 4, 16, QLatin1Char('0')).toLower();
+            QString addr2 = QString("0x%1").arg(MAR_addr + 2, 4, 16, QLatin1Char('0')).toLower();
+            QString addr3 = QString("0x%1").arg(MAR_addr + 3, 4, 16, QLatin1Char('0')).toLower();
+
+            QStandardItemModel* ramModel = qobject_cast<QStandardItemModel*>(ui->ram_table->model());
+
+            for (int row = 0; row < ramModel->rowCount(); ++row) {
+                QString rowAddr = ramModel->item(row, 0)->text().toLower();
+
+                if (rowAddr == addr0) {
+                    QString val = QString("%1").arg(byte0, 8, 2, QChar('0'));  // 8-bit binary
+                    QStandardItem* item = new QStandardItem(val);
+                    item->setTextAlignment(Qt::AlignCenter);
+                    ramModel->setItem(row, 1, item);
+                }
+                else if (rowAddr == addr1) {
+                    QString val = QString("%1").arg(byte1, 8, 2, QChar('0'));
+                    QStandardItem* item = new QStandardItem(val);
+                    item->setTextAlignment(Qt::AlignCenter);
+                    ramModel->setItem(row, 1, item);
+                }
+                else if (rowAddr == addr2) {
+                    QString val = QString("%1").arg(byte2, 8, 2, QChar('0'));
+                    QStandardItem* item = new QStandardItem(val);
+                    item->setTextAlignment(Qt::AlignCenter);
+                    ramModel->setItem(row, 1, item);
+                }
+                else if (rowAddr == addr3) {
+                    QString val = QString("%1").arg(byte3, 8, 2, QChar('0'));
+                    QStandardItem* item = new QStandardItem(val);
+                    item->setTextAlignment(Qt::AlignCenter);
+                    ramModel->setItem(row, 1, item);
+                }
+            }
+
+            SC_n = -1;
+        }
+
+    }
+
+
 }
 
 
