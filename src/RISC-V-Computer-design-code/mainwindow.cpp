@@ -1324,28 +1324,30 @@ void MainWindow::on_clock_btn_clicked()
 
     if(UPCODE == B && SC_n == 3){
         IR = ui->ir_label->text();
-        QString IMM = "0000000000000";
-        IMM.replace(5, 6, IR.mid(0, 6));
-        IMM[12] = IR[0];
-        IMM.replace(1, 4, IR.mid(20, 4));
-        IMM[11] = IR[24];
+        QString IMM = "";
+        IMM += IR[0];
+        IMM += IR[24];
+        IMM += IR.mid(1, 6);
+        IMM += IR.mid(20, 4);
+        IMM += "0";
         ui->imm_label->setText(IMM);
     }
 
     if((UPCODE == U1 || UPCODE == U2) && SC_n == 3){
         IR = ui->ir_label->text();
-        QString IMM = "00000000000000000000000000000000";
-        IMM.replace(12, 10, IR.mid(0, 10));
+        QString IMM = "";
+        IMM = IR.mid(0, 20) + "000000000000";
         ui->imm_label->setText(IMM);
     }
 
     if(UPCODE == J && SC_n == 3){
         IR = ui->ir_label->text();
-        QString IMM = "000000000000000000000";
-        IMM.replace(12, 8, IR.mid(12, 8));
-        IMM[11] = IR[11];
-        IMM.replace(1, 10, IR.mid(1, 10));
-        IMM[20] = IR[0];
+        QString IMM = "";
+        IMM += IR[0];
+        IMM += IR.mid(12, 8);
+        IMM += IR[11];
+        IMM += IR.mid(1, 10);
+        IMM += "0";
         ui->imm_label->setText(IMM);
     }
 
@@ -2142,6 +2144,7 @@ void MainWindow::on_clock_btn_clicked()
         //beq
         if(FUNCT3 == "000" && Z == 1 && SC_n == 5){
             quint16 PC_V = PC.toUInt(nullptr, 2);
+            PC_V = PC_V - 4;
             quint16 IMM_V = IMM.toUInt(nullptr, 2);
             quint32 sum = static_cast<quint32>(PC_V) + static_cast<quint32>(IMM_V);
             quint16 answer = static_cast<quint16>(sum);
@@ -2156,6 +2159,7 @@ void MainWindow::on_clock_btn_clicked()
         //bne
         if(FUNCT3 == "001" && Z == 0 && SC_n == 5){
             quint16 PC_V = PC.toUInt(nullptr, 2);
+            PC_V = PC_V - 4;
             quint16 IMM_V = IMM.toUInt(nullptr, 2);
             quint32 sum = static_cast<quint32>(PC_V) + static_cast<quint32>(IMM_V);
             quint16 answer = static_cast<quint16>(sum);
@@ -2170,6 +2174,7 @@ void MainWindow::on_clock_btn_clicked()
         //blt
         if(FUNCT3 == "100" && N == 1 && SC_n == 5){
             quint16 PC_V = PC.toUInt(nullptr, 2);
+            PC_V = PC_V - 4;
             quint16 IMM_V = IMM.toUInt(nullptr, 2);
             quint32 sum = static_cast<quint32>(PC_V) + static_cast<quint32>(IMM_V);
             quint16 answer = static_cast<quint16>(sum);
@@ -2184,6 +2189,7 @@ void MainWindow::on_clock_btn_clicked()
         //bge
         if(FUNCT3 == "101" && N == 0 && SC_n == 5){
             quint16 PC_V = PC.toUInt(nullptr, 2);
+            PC_V = PC_V - 4;
             quint16 IMM_V = IMM.toUInt(nullptr, 2);
             quint32 sum = static_cast<quint32>(PC_V) + static_cast<quint32>(IMM_V);
             quint16 answer = static_cast<quint16>(sum);
@@ -2198,6 +2204,7 @@ void MainWindow::on_clock_btn_clicked()
         //bltu
         if(FUNCT3 == "110" && N == 1 && SC_n == 5){
             quint16 PC_V = PC.toUInt(nullptr, 2);
+            PC_V = PC_V - 4;
             quint16 IMM_V = IMM.toUInt(nullptr, 2);
             quint32 sum = static_cast<quint32>(PC_V) + static_cast<quint32>(IMM_V);
             quint16 answer = static_cast<quint16>(sum);
@@ -2212,6 +2219,7 @@ void MainWindow::on_clock_btn_clicked()
         //bgeu
         if(FUNCT3 == "111" && N == 0 && SC_n == 5){
             quint16 PC_V = PC.toUInt(nullptr, 2);
+            PC_V = PC_V - 4;
             quint16 IMM_V = IMM.toUInt(nullptr, 2);
             quint32 sum = static_cast<quint32>(PC_V) + static_cast<quint32>(IMM_V);
             quint16 answer = static_cast<quint16>(sum);
@@ -2222,6 +2230,129 @@ void MainWindow::on_clock_btn_clicked()
 
             SC_n = -1;
         }
+    }
+
+    //jal
+    if(UPCODE == J && SC_n == 4){
+        IR = ui->ir_label->text();
+        PC = ui->pc_label->text();
+        GAR = ui->gar_label->text();
+
+        int garIndex = GAR.toInt(nullptr, 2);
+
+        QString targetRegisterGAR = QString("x%1").arg(garIndex);
+
+        quint16 PC_V = PC.toUInt(nullptr, 2);
+
+        quint32 sum = static_cast<quint32>(PC_V) + static_cast<quint32>(4);
+
+        QString binaryAnswer = QString("%1").arg((sum), 32, 2, QChar('0'));
+
+        QStandardItemModel* generalModel = qobject_cast<QStandardItemModel*>(ui->general_table->model());
+
+        for (int row = 0; row < generalModel->rowCount(); ++row) {
+            QString addrInTable = generalModel->item(row, 0)->text();
+            if (addrInTable == targetRegisterGAR) {
+                QStandardItem* item = new QStandardItem(binaryAnswer);
+                item->setTextAlignment(Qt::AlignCenter);
+                generalModel->setItem(row, 1, item);
+
+                break;
+            }
+        }
+    }
+    if(UPCODE == J && SC_n == 5){
+        IR = ui->ir_label->text();
+        PC = ui->pc_label->text();
+        QString IMM = ui->imm_label->text();
+
+        int IMM_V = binaryToSignedInt(IMM);
+        quint16 PC_V = PC.toUInt(nullptr, 2);
+
+        int sum = PC_V + IMM_V;
+
+        quint16 result = static_cast<quint16>(sum);
+        QString binaryAnswer = QString("%1").arg(result, 16, 2, QChar('0'));
+
+        ui->pc_label->setText(binaryAnswer);
+
+        SC_n = -1;
+    }
+
+    //lui
+    if(UPCODE == U1 && SC_n == 4){
+        IR = ui->ir_label->text();
+        GAR = ui->gar_label->text();
+        QString IMM = ui->imm_label->text();
+        int IMM_V = binaryToSignedInt(IMM);
+
+        qint32 result = static_cast<qint32>(IMM_V) << 12;
+
+        QString binaryAnswer = QString("%1").arg((result), 32, 2, QChar('0'));
+
+        int garIndex = GAR.toInt(nullptr, 2);
+
+        QString targetRegisterGAR = QString("x%1").arg(garIndex);
+
+        QStandardItemModel* generalModel = qobject_cast<QStandardItemModel*>(ui->general_table->model());
+
+        for (int row = 0; row < generalModel->rowCount(); ++row) {
+            QString addrInTable = generalModel->item(row, 0)->text();
+            if (addrInTable == targetRegisterGAR) {
+                QStandardItem* item = new QStandardItem(binaryAnswer);
+                item->setTextAlignment(Qt::AlignCenter);
+                generalModel->setItem(row, 1, item);
+
+                break;
+            }
+        }
+
+        SC_n = -1;
+    }
+
+    //auipc
+    if(UPCODE == U2 && SC_n == 4){
+        IR = ui->ir_label->text();
+        QString IMM = ui->imm_label->text();
+
+        int IMM_V = binaryToSignedInt(IMM);
+        qint32 result = static_cast<qint32>(IMM_V) << 12;
+
+        QString binaryAnswer = QString("%1").arg((result), 32, 2, QChar('0'));
+
+        ui->imm_label->setText(binaryAnswer);
+    }
+    if(UPCODE == U2 && SC_n == 5){
+        IR = ui->ir_label->text();
+        PC = ui->pc_label->text();
+        GAR = ui->gar_label->text();
+        QString IMM = ui->imm_label->text();
+
+        int IMM_V = binaryToSignedInt(IMM);
+        quint16 PC_V = PC.toUInt(nullptr, 2);
+
+        quint32 sum = static_cast<quint32>(PC_V) + static_cast<quint32>(IMM_V);
+
+        QString binaryAnswer = QString("%1").arg((sum), 32, 2, QChar('0'));
+
+        int garIndex = GAR.toInt(nullptr, 2);
+
+        QString targetRegisterGAR = QString("x%1").arg(garIndex);
+
+        QStandardItemModel* generalModel = qobject_cast<QStandardItemModel*>(ui->general_table->model());
+
+        for (int row = 0; row < generalModel->rowCount(); ++row) {
+            QString addrInTable = generalModel->item(row, 0)->text();
+            if (addrInTable == targetRegisterGAR) {
+                QStandardItem* item = new QStandardItem(binaryAnswer);
+                item->setTextAlignment(Qt::AlignCenter);
+                generalModel->setItem(row, 1, item);
+
+                break;
+            }
+        }
+
+        SC_n = -1;
     }
 }
 
