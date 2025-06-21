@@ -30,6 +30,7 @@
 
 MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWindow) {
     ui->setupUi(this);
+    this->setWindowTitle("RISC-V Computer");
 
     instrMap = {
         {"add", {"0000000", "00000", "00000", "000", "00000", "0110011"}},
@@ -352,8 +353,8 @@ void MainWindow::on_compile_btn_clicked() {
         qDebug() << "Error saving binary file:" << QString::fromStdString(e.what());
     }
 
-    if (ui->output_field) {
-        ui->output_field->setPlainText(binaryOutput.join("\n").trimmed());
+    if (ui->console_field) {
+        ui->console_field->setPlainText(binaryOutput.join("\n").trimmed());
     } else {
         QMessageBox::information(this, "Assembly Output", binaryOutput.join("\n"));
     }
