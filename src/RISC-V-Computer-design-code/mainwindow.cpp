@@ -306,9 +306,6 @@ void MainWindow::saveToBinaryFile(const std::string& filename) {
         throw std::runtime_error("Failed to open file: " + filename);
     }
 
-    if (maxAddress > memoryArray.size()) {
-        maxAddress = memoryArray.size();
-    }
     if (maxAddress > 0) {
         file.write(reinterpret_cast<const char*>(memoryArray.data()), maxAddress);
     }
@@ -554,9 +551,6 @@ std::string MainWindow::assemble(const std::string& line, int& currentPC) {
     auto parseImmediate = [&](const std::string& imm_str) -> long long {
         try {
             if (imm_str.length() == 3 && imm_str[0] == '\'' && imm_str[2] == '\'') {
-                if (inst != ".byte") {
-                    throw std::runtime_error("Character literals like \"" + imm_str + "\" are only allowed with .byte directive");
-                }
                 char c = imm_str[1];
                 return static_cast<long long>(c);
             }
@@ -612,7 +606,9 @@ std::string MainWindow::assemble(const std::string& line, int& currentPC) {
                 throw std::runtime_error(".word requires 1 argument, got " + std::to_string(tokens.size() - instruction_start - 1));
             }
             long long value = parseImmediate(tokens[instruction_start + 1]);
-            storeInMemory(static_cast<int>(value), 4, currentAddress);
+            if (value > 4294967295 || value < -2147483648) {
+                throw std::runtime_error("Value out of range for .word: " + std::to_string(value));
+            }
             binaryInstruction = to_bin(static_cast<int>(value), 32);
             if (currentAddress + 4 <= memoryArray.size()) {
                 memoryArray[currentAddress + 0] = static_cast<uint8_t>(value & 0xFF);
@@ -635,7 +631,6 @@ std::string MainWindow::assemble(const std::string& line, int& currentPC) {
             if (value > 65535 || value < -32768) {
                 throw std::runtime_error("Value out of range for .half: " + std::to_string(value));
             }
-            storeInMemory(static_cast<int>(value), 2, currentAddress);
             binaryInstruction = to_bin(static_cast<int>(value), 16);
             if (currentAddress + 2 <= memoryArray.size()) {
                 memoryArray[currentAddress + 0] = static_cast<uint8_t>(value & 0xFF);
@@ -656,10 +651,9 @@ std::string MainWindow::assemble(const std::string& line, int& currentPC) {
             if (value > 255 || value < -128) {
                 throw std::runtime_error("Value out of range for .byte: " + std::to_string(value));
             }
-            storeInMemory(static_cast<int>(value), 1, currentAddress);
             binaryInstruction = to_bin(static_cast<int>(value), 8);
             if (currentAddress + 1 <= memoryArray.size()) {
-                memoryArray[currentAddress + 0] = static_cast<uint8_t>(value & 0xFF);
+                memoryArray[currentAddress] = static_cast<uint8_t>(value & 0xFF);
                 currentAddress += 1;
                 maxAddress = std::max(maxAddress, static_cast<size_t>(currentAddress));
             } else {
@@ -1082,12 +1076,12 @@ std::string MainWindow::assemble(const std::string& line, int& currentPC) {
             }
 
 
-            std::string imm_val = to_bin(imm >> 0, 20); // شیفت به راست برای حذف بیت صفر
+            std::string imm_val = to_bin(imm >> 0, 20);
             std::string rd_val = to_bin(rd, 5);
-            std::string imm20 = imm_val.substr(0, 1);      // imm[20]
-            std::string imm10_1 = imm_val.substr(1, 10);   // imm[10:1]
-            std::string imm11 = imm_val.substr(11, 1);     // imm[11]
-            std::string imm19_12 = imm_val.substr(12, 8);  // imm[19:12]
+            std::string imm20 = imm_val.substr(0, 1);
+            std::string imm10_1 = imm_val.substr(1, 10);
+            std::string imm11 = imm_val.substr(11, 1);
+            std::string imm19_12 = imm_val.substr(12, 8);
 
             binaryInstruction = imm20 + imm10_1 + imm11 + imm19_12 + rd_val + info.opcode;
             if (currentAddress + 4 <= memoryArray.size()) {
