@@ -9,53 +9,28 @@
 #include <string>
 #include <algorithm>
 #include <cctype>
+#include <QStandardItem>
+#include <QString>
+#include <QTime>
+#include <QCoreApplication>
+#include <math.h>
 #include "ui_mainwindow.h"
+#include "mainwindow.h"
 
-class MainWindow : public QMainWindow {
-    Q_OBJECT
+#define R "0110011"
+#define I1 "0010011"
+#define I2 "0000011"
+#define I3 "1100111"
+#define S "0100011"
+#define B "1100011"
+#define J "1101111"
+#define U1 "0110111"
+#define U2 "0010111"
 
-public:
-    explicit MainWindow(QWidget *parent = nullptr);
-    ~MainWindow();
-
-private slots:
-    void on_compile_btn_clicked();
-
-private:
-    Ui::MainWindow *ui;
-    bool isCompiling = false;
-
-    struct InstrInfo {
-        std::string funct7;
-        std::string rs2;
-        std::string rs1;
-        std::string funct3;
-        std::string rd;
-        std::string opcode;
-    };
-
-    std:: unordered_map<std::string, InstrInfo> instrMap;
-    std::unordered_map<std::string, int> regMap;
-    std::unordered_map<std::string, int> symbolTable;
-    int registers[32] = {0};
-    std::vector<uint8_t> memory;
-    int currentAddress = 0;
-    size_t maxAddress = 0;
-    std::vector<uint8_t> memoryArray;
-
-    bool isNumeric(const std::string& str);
-    std::string to_bin(int val, int bits);
-    std::vector<std::string> tokenize(const std::string& line);
-    std::string assemble(const std::string& line, int& currentPC);
-    void parseLabels();
-    void storeInMemory(int value, int size, int& address);
-    int upper(long long imm);
-    int lower(long long imm);
-    void saveToBinaryFile(const std::string& filename);
-};
 
 MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWindow) {
     ui->setupUi(this);
+    this->setWindowTitle("RISC-V Computer");
 
     instrMap = {
         {"add", {"0000000", "00000", "00000", "000", "00000", "0110011"}},
@@ -400,8 +375,8 @@ void MainWindow::on_compile_btn_clicked() {
         qDebug() << "Error saving binary file:" << QString::fromStdString(e.what());
     }
 
-    if (ui->output_field) {
-        ui->output_field->setPlainText(binaryOutput.join("\n").trimmed());
+    if (ui->console_field) {
+        ui->console_field->setPlainText(binaryOutput.join("\n").trimmed());
     } else {
         QMessageBox::information(this, "Assembly Output", binaryOutput.join("\n"));
     }
@@ -1162,3 +1137,1293 @@ std::string MainWindow::assemble(const std::string& line, int& currentPC) {
 
     return binaryInstruction;
 }
+
+void MainWindow::on_run_btn_clicked()
+{
+    QStandardItemModel* modell = qobject_cast<QStandardItemModel*>(ui->ram_table->model());
+    if (!modell || modell->rowCount() == 0) {
+        return;
+    }
+
+    stopflag = 0;
+    QString clock = ui->clock_field->toPlainText();
+    if(clock == ""){
+        clock = "1000";
+        ui->clock_field->setPlainText("1000");
+    }
+
+    int delayMs = clock.toInt();
+    while(stopflag == 0){
+        on_clock_btn_clicked();
+        QTime endTime = QTime::currentTime().addMSecs(delayMs);
+        while (QTime::currentTime() < endTime) {
+            QCoreApplication::processEvents(QEventLoop::AllEvents, 1);
+        }
+    }
+}
+
+int MainWindow::binaryToSignedInt(const QString& binStr) {
+    int bitWidth = binStr.length();
+    bool ok = false;
+
+    quint64 unsignedVal = binStr.toULongLong(&ok, 2);
+    if (!ok) {
+        return 0;
+    }
+
+    bool isNegative = (binStr[0] == '1');
+
+    if (isNegative) {
+        qint64 signedVal = static_cast<qint64>(unsignedVal) - (1LL << bitWidth);
+        return static_cast<int>(signedVal);
+
+    }
+    else {
+        return static_cast<int>(unsignedVal);
+    }
+}
+
+
+void MainWindow::on_clock_btn_clicked()
+{
+    QString PC, MAR, IR, UPCODE, FUNCT3, GAR, FUNCT7;
+    static int Z = 0,P = 0,N = 0;
+    QString SC = ui->sc_label->text();
+
+    QStandardItemModel* modell = qobject_cast<QStandardItemModel*>(ui->ram_table->model());
+    if (!modell || modell->rowCount() == 0) {
+        return;
+    }
+
+    if(SC == "\\- \\- \\-"){
+        SC_n = -1;
+    }
+    else if(SC_n != -1){
+        SC_n = SC.toInt(nullptr, 2);
+    }
+
+    SC_n++;
+    SC = QString("%1").arg(SC_n, 3, 2, QChar('0'));
+    ui->sc_label->setText(SC);
+
+    if(SC_n == 0){
+        PC = ui->pc_label->text();
+        MAR = PC;
+        ui->mar_label->setText(MAR);
+    }
+
+    if(SC_n == 1){
+        MAR = ui->mar_label->text();
+        int marAddr = MAR.toInt(nullptr, 2);
+
+        QStandardItemModel* model = qobject_cast<QStandardItemModel*>(ui->ram_table->model());
+
+        for (int offset = 3; offset >= 0; --offset) {
+            int targetAddr = marAddr + offset;
+            QString addrStr = QString("0x%1").arg(targetAddr, 4, 16, QChar('0'));
+
+            for (int row = 0; row < model->rowCount(); ++row) {
+                QString addrInTable = model->item(row, 0)->text();
+                if (addrInTable == addrStr) {
+                    IR += model->item(row, 1)->text();
+                    break;
+                }
+            }
+        }
+
+        ui->ir_label->setText(IR);
+
+        PC = ui->pc_label->text();
+        int PC_n = PC.toInt(nullptr, 2);
+        PC_n += 4;
+        PC = QString("%1").arg(PC_n, 16, 2, QChar('0'));
+        ui->pc_label->setText(PC);
+    }
+
+    if(SC_n == 2){
+        IR = ui->ir_label->text();
+        UPCODE = IR.mid(25, 7);
+        ui->upcode_label->setText(UPCODE);
+    }
+
+    UPCODE = ui->upcode_label->text();
+
+    if((UPCODE == R || UPCODE == I1 || UPCODE == I2 || UPCODE == I3 || UPCODE == S || UPCODE == B) && SC_n == 3){
+        IR = ui->ir_label->text();
+        FUNCT3 = IR.mid(17, 3);
+        ui->funct3_label->setText(FUNCT3);
+    }
+
+    if((UPCODE == R || UPCODE == I1 || UPCODE == I2 || UPCODE == I3 || UPCODE == U1 || UPCODE == U2 || UPCODE == J) && SC_n == 3){
+        IR = ui->ir_label->text();
+        GAR = IR.mid(20, 5);
+        ui->gar_label->setText(GAR);
+    }
+
+    if(UPCODE == R && SC_n == 3){
+        IR = ui->ir_label->text();
+        FUNCT7 = IR.mid(0, 7);
+        ui->funct7_label->setText(FUNCT7);
+    }
+
+    if((UPCODE == I1 || UPCODE == I2 || UPCODE == I3) && SC_n == 3){
+        IR = ui->ir_label->text();
+        QString IMM = IR.mid(0, 12);
+        ui->imm_label->setText(IMM);
+    }
+
+    if(UPCODE == S && SC_n == 3){
+        IR = ui->ir_label->text();
+        QString IMM = IR.mid(0, 7);
+        IMM += IR.mid(20, 5);
+        ui->imm_label->setText(IMM);
+    }
+
+    if(UPCODE == B && SC_n == 3){
+        IR = ui->ir_label->text();
+        QString IMM = "";
+        IMM += IR[0];
+        IMM += IR[24];
+        IMM += IR.mid(1, 6);
+        IMM += IR.mid(20, 4);
+        IMM += "0";
+        ui->imm_label->setText(IMM);
+    }
+
+    if((UPCODE == U1 || UPCODE == U2) && SC_n == 3){
+        IR = ui->ir_label->text();
+        QString IMM = "";
+        IMM = IR.mid(0, 20) + "000000000000";
+        ui->imm_label->setText(IMM);
+    }
+
+    if(UPCODE == J && SC_n == 3){
+        IR = ui->ir_label->text();
+        QString IMM = "";
+        IMM += IR[0];
+        IMM += IR.mid(12, 8);
+        IMM += IR[11];
+        IMM += IR.mid(1, 10);
+        IMM += "0";
+        ui->imm_label->setText(IMM);
+    }
+
+    if(UPCODE == R && SC_n == 4){
+        GAR = ui->gar_label->text();
+        IR = ui->ir_label->text();
+        FUNCT3 = ui->funct3_label->text();
+        FUNCT7 = ui->funct7_label->text();
+
+        QString RS1 = IR.mid(12,5);
+        QString RS2 = IR.mid(7,5);
+
+        int addr1 = RS1.toInt(nullptr, 2);
+        int addr2 = RS2.toInt(nullptr, 2);
+        int garIndex = GAR.toInt(nullptr, 2);
+
+        QString targetRegister1 = QString("x%1").arg(addr1);
+        QString targetRegister2 = QString("x%1").arg(addr2);
+        QString targetRegisterGAR = QString("x%1").arg(garIndex);
+
+        QStandardItemModel* generalModel = qobject_cast<QStandardItemModel*>(ui->general_table->model());
+
+        for (int row = 0; row < generalModel->rowCount(); ++row) {
+            QString addrInTable = generalModel->item(row, 0)->text();
+            if (addrInTable == targetRegister1) {
+                RS1 = generalModel->item(row, 1)->text();
+            }
+            if(addrInTable == targetRegister2){
+                RS2 = generalModel->item(row, 1)->text();
+            }
+        }
+
+        //add
+        if(FUNCT3 == "000" && FUNCT7 == "0000000"){
+            int RS1_V = binaryToSignedInt(RS1);
+            int RS2_V = binaryToSignedInt(RS2);
+            int answer = RS1_V + RS2_V ;
+            QString binaryAnswer = QString("%1").arg(static_cast<quint32>(answer), 32, 2, QChar('0'));
+
+            for (int row = 0; row < generalModel->rowCount(); ++row) {
+                QString addrInTable = generalModel->item(row, 0)->text();
+                if (addrInTable == targetRegisterGAR) {
+                    QStandardItem* item = new QStandardItem(binaryAnswer);
+                    item->setTextAlignment(Qt::AlignCenter);
+                    generalModel->setItem(row, 1, item);
+
+                    break;
+                }
+            }
+
+            SC_n = -1;
+        }
+
+        //sub
+        if(FUNCT3 == "000" && FUNCT7 == "0100000"){
+            int RS1_V = binaryToSignedInt(RS1);
+            int RS2_V = binaryToSignedInt(RS2);
+            int answer = RS1_V - RS2_V ;
+            QString binaryAnswer = QString("%1").arg(static_cast<quint32>(answer), 32, 2, QChar('0'));
+
+            for (int row = 0; row < generalModel->rowCount(); ++row) {
+                QString addrInTable = generalModel->item(row, 0)->text();
+                if (addrInTable == targetRegisterGAR) {
+                    QStandardItem* item = new QStandardItem(binaryAnswer);
+                    item->setTextAlignment(Qt::AlignCenter);
+                    generalModel->setItem(row, 1, item);
+
+                    break;
+                }
+            }
+
+            SC_n = -1;
+        }
+
+        //xor
+        if(FUNCT3 == "100" && FUNCT7 == "0000000"){
+            QString binaryAnswer;
+            int len = RS1.length();
+
+            for (int i = 0; i < len; ++i) {
+                QChar bitA = RS1[i];
+                QChar bitB = RS2[i];
+
+                if (bitA != bitB) {
+                    binaryAnswer.append('1');
+                } else {
+                    binaryAnswer.append('0');
+                }
+            }
+
+            for (int row = 0; row < generalModel->rowCount(); ++row) {
+                QString addrInTable = generalModel->item(row, 0)->text();
+                if (addrInTable == targetRegisterGAR) {
+                    QStandardItem* item = new QStandardItem(binaryAnswer);
+                    item->setTextAlignment(Qt::AlignCenter);
+                    generalModel->setItem(row, 1, item);
+
+                    break;
+                }
+            }
+
+            SC_n = -1;
+        }
+
+        //or
+        if(FUNCT3 == "110" && FUNCT7 == "0000000"){
+            QString binaryAnswer;
+            int len = RS1.length();
+
+            for (int i = 0; i < len; ++i) {
+                QChar bitA = RS1[i];
+                QChar bitB = RS2[i];
+
+                if (bitA == '1' || bitB == '1') {
+                    binaryAnswer.append('1');
+                } else {
+                    binaryAnswer.append('0');
+                }
+            }
+
+            for (int row = 0; row < generalModel->rowCount(); ++row) {
+                QString addrInTable = generalModel->item(row, 0)->text();
+                if (addrInTable == targetRegisterGAR) {
+                    QStandardItem* item = new QStandardItem(binaryAnswer);
+                    item->setTextAlignment(Qt::AlignCenter);
+                    generalModel->setItem(row, 1, item);
+
+                    break;
+                }
+            }
+
+            SC_n = -1;
+        }
+
+        //and
+        if(FUNCT3 == "111" && FUNCT7 == "0000000"){
+            QString binaryAnswer;
+            int len = RS1.length();
+
+            for (int i = 0; i < len; ++i) {
+                QChar bitA = RS1[i];
+                QChar bitB = RS2[i];
+
+                if (bitA == '1' && bitB == '1') {
+                    binaryAnswer.append('1');
+                } else {
+                    binaryAnswer.append('0');
+                }
+            }
+
+            for (int row = 0; row < generalModel->rowCount(); ++row) {
+                QString addrInTable = generalModel->item(row, 0)->text();
+                if (addrInTable == targetRegisterGAR) {
+                    QStandardItem* item = new QStandardItem(binaryAnswer);
+                    item->setTextAlignment(Qt::AlignCenter);
+                    generalModel->setItem(row, 1, item);
+
+                    break;
+                }
+            }
+
+            SC_n = -1;
+        }
+
+        //sll
+        if(FUNCT3 == "001" && FUNCT7 == "0000000"){
+            QString RS2_5bits = RS2.mid(RS2.size() - 5, 5);
+            unsigned shiftAmount = RS2_5bits.toUInt(nullptr, 2);
+
+            int RS1_V = binaryToSignedInt(RS1);
+            int answer = RS1_V << shiftAmount;
+
+            QString binaryAnswer = QString("%1").arg(static_cast<quint32>(answer), 32, 2, QChar('0'));
+
+            for (int row = 0; row < generalModel->rowCount(); ++row) {
+                QString addrInTable = generalModel->item(row, 0)->text();
+                if (addrInTable == targetRegisterGAR) {
+                    QStandardItem* item = new QStandardItem(binaryAnswer);
+                    item->setTextAlignment(Qt::AlignCenter);
+                    generalModel->setItem(row, 1, item);
+
+                    break;
+                }
+            }
+
+            SC_n = -1;
+        }
+
+        //srl
+        if(FUNCT3 == "101" && FUNCT7 == "0000000"){
+            QString RS2_5bits = RS2.mid(RS2.size() - 5, 5);
+            unsigned shiftAmount = RS2_5bits.toUInt(nullptr, 2);
+
+            unsigned int RS1_V = RS1.toUInt(nullptr, 2);
+            unsigned int answer = RS1_V >> shiftAmount;
+
+            QString binaryAnswer = QString("%1").arg(static_cast<quint32>(answer), 32, 2, QChar('0'));
+            qDebug() << binaryAnswer;
+
+            for (int row = 0; row < generalModel->rowCount(); ++row) {
+                QString addrInTable = generalModel->item(row, 0)->text();
+                if (addrInTable == targetRegisterGAR) {
+                    QStandardItem* item = new QStandardItem(binaryAnswer);
+                    item->setTextAlignment(Qt::AlignCenter);
+                    generalModel->setItem(row, 1, item);
+
+                    break;
+                }
+            }
+
+            SC_n = -1;
+        }
+
+        //sra
+        if(FUNCT3 == "101" && FUNCT7 == "0100000"){
+            QString RS2_5bits = RS2.mid(RS2.size() - 5, 5);
+            unsigned int shiftAmount = RS2_5bits.toUInt(nullptr, 2);
+
+            int RS1_V = binaryToSignedInt(RS1);
+            int answer = RS1_V >> shiftAmount;
+
+            QString binaryAnswer = QString("%1").arg(static_cast<quint32>(answer), 32, 2, QChar('0'));
+
+            for (int row = 0; row < generalModel->rowCount(); ++row) {
+                QString addrInTable = generalModel->item(row, 0)->text();
+                if (addrInTable == targetRegisterGAR) {
+                    QStandardItem* item = new QStandardItem(binaryAnswer);
+                    item->setTextAlignment(Qt::AlignCenter);
+                    generalModel->setItem(row, 1, item);
+
+                    break;
+                }
+            }
+
+            SC_n = -1;
+        }
+
+        //mul
+        if(FUNCT3 == "000" && FUNCT7 == "0000001"){
+            int RS1_V = binaryToSignedInt(RS1);
+            int RS2_V = binaryToSignedInt(RS2);
+
+            qint64 fullResult = static_cast<qint64>(RS1_V) * static_cast<qint64>(RS2_V);
+
+            quint32 answer = static_cast<quint32>(fullResult & 0xFFFFFFFF);
+
+            QString binaryAnswer = QString("%1").arg(static_cast<quint32>(answer), 32, 2, QChar('0'));
+
+            for (int row = 0; row < generalModel->rowCount(); ++row) {
+                QString addrInTable = generalModel->item(row, 0)->text();
+                if (addrInTable == targetRegisterGAR) {
+                    QStandardItem* item = new QStandardItem(binaryAnswer);
+                    item->setTextAlignment(Qt::AlignCenter);
+                    generalModel->setItem(row, 1, item);
+
+                    break;
+                }
+            }
+
+            SC_n = -1;
+        }
+
+        //mulh
+        if(FUNCT3 == "001" && FUNCT7 == "0000001"){
+            int RS1_V = binaryToSignedInt(RS1);
+            int RS2_V = binaryToSignedInt(RS2);
+
+            qint64 fullResult = static_cast<qint64>(RS1_V) * static_cast<qint64>(RS2_V);
+
+            quint32 answer = static_cast<quint32>((fullResult >> 32) & 0xFFFFFFFF);
+
+            QString binaryAnswer = QString("%1").arg(static_cast<quint32>(answer), 32, 2, QChar('0'));
+
+            for (int row = 0; row < generalModel->rowCount(); ++row) {
+                QString addrInTable = generalModel->item(row, 0)->text();
+                if (addrInTable == targetRegisterGAR) {
+                    QStandardItem* item = new QStandardItem(binaryAnswer);
+                    item->setTextAlignment(Qt::AlignCenter);
+                    generalModel->setItem(row, 1, item);
+                    break;
+                }
+            }
+
+            SC_n = -1;
+        }
+
+        //div
+        if(FUNCT3 == "100" && FUNCT7 == "0000001"){
+            int RS1_V = binaryToSignedInt(RS1);
+            int RS2_V = binaryToSignedInt(RS2);
+            int answer;
+
+            if (RS2_V == 0){
+                answer = 0;
+            }
+            else{
+                answer = RS1_V / RS2_V;
+            }
+
+            QString binaryAnswer = QString("%1").arg(static_cast<quint32>(answer), 32, 2, QChar('0'));
+
+            for (int row = 0; row < generalModel->rowCount(); ++row) {
+                QString addrInTable = generalModel->item(row, 0)->text();
+                if (addrInTable == targetRegisterGAR) {
+                    QStandardItem* item = new QStandardItem(binaryAnswer);
+                    item->setTextAlignment(Qt::AlignCenter);
+                    generalModel->setItem(row, 1, item);
+
+                    break;
+                }
+            }
+
+            SC_n = -1;
+        }
+
+        //rem
+        if(FUNCT3 == "110" && FUNCT7 == "0000001"){
+            int RS1_V = binaryToSignedInt(RS1);
+            int RS2_V = binaryToSignedInt(RS2);
+            int answer;
+
+            if (RS2_V == 0){
+                answer = RS1_V;
+            }
+            else{
+                answer = RS1_V % RS2_V;
+            }
+
+            QString binaryAnswer = QString("%1").arg(static_cast<quint32>(answer), 32, 2, QChar('0'));
+
+            for (int row = 0; row < generalModel->rowCount(); ++row) {
+                QString addrInTable = generalModel->item(row, 0)->text();
+                if (addrInTable == targetRegisterGAR) {
+                    QStandardItem* item = new QStandardItem(binaryAnswer);
+                    item->setTextAlignment(Qt::AlignCenter);
+                    generalModel->setItem(row, 1, item);
+
+                    break;
+                }
+            }
+
+            SC_n = -1;
+        }
+    }
+
+    if(UPCODE == R && SC_n == 5){
+        GAR = ui->gar_label->text();
+        IR = ui->ir_label->text();
+        FUNCT3 = ui->funct3_label->text();
+        FUNCT7 = ui->funct7_label->text();
+
+        QString RS1 = IR.mid(12,5);
+        QString RS2 = IR.mid(7,5);
+
+        int addr1 = RS1.toInt(nullptr, 2);
+        int addr2 = RS2.toInt(nullptr, 2);
+        int garIndex = GAR.toInt(nullptr, 2);
+
+        QString targetRegister1 = QString("x%1").arg(addr1);
+        QString targetRegister2 = QString("x%1").arg(addr2);
+        QString targetRegisterGAR = QString("x%1").arg(garIndex);
+
+        QStandardItemModel* generalModel = qobject_cast<QStandardItemModel*>(ui->general_table->model());
+
+        for (int row = 0; row < generalModel->rowCount(); ++row) {
+            QString addrInTable = generalModel->item(row, 0)->text();
+            if (addrInTable == targetRegister1) {
+                RS1 = generalModel->item(row, 1)->text();
+            }
+            if(addrInTable == targetRegister2){
+                RS2 = generalModel->item(row, 1)->text();
+            }
+        }
+
+        //slt
+        if(FUNCT3 == "010" && FUNCT7 == "0000000"){
+            int RS1_V = binaryToSignedInt(RS1);
+            int RS2_V = binaryToSignedInt(RS2);
+
+            int answer = RS1_V < RS2_V ? 1 : 0;
+            QString binaryAnswer = QString("%1").arg(static_cast<quint32>(answer), 32, 2, QChar('0'));
+
+            for (int row = 0; row < generalModel->rowCount(); ++row) {
+                QString addrInTable = generalModel->item(row, 0)->text();
+                if (addrInTable == targetRegisterGAR) {
+                    QStandardItem* item = new QStandardItem(binaryAnswer);
+                    item->setTextAlignment(Qt::AlignCenter);
+                    generalModel->setItem(row, 1, item);
+
+                    break;
+                }
+            }
+
+            SC_n = -1;
+        }
+
+        //sltu
+        if(FUNCT3 == "011" && FUNCT7 == "0000000"){
+            unsigned RS1_V = RS1.toUInt(nullptr, 2);
+            unsigned RS2_V = RS2.toUInt(nullptr, 2);
+            int answer = RS1_V < RS2_V ? 1 : 0;
+            QString binaryAnswer = QString("%1").arg(static_cast<quint32>(answer), 32, 2, QChar('0'));
+
+            for (int row = 0; row < generalModel->rowCount(); ++row) {
+                QString addrInTable = generalModel->item(row, 0)->text();
+                if (addrInTable == targetRegisterGAR) {
+                    QStandardItem* item = new QStandardItem(binaryAnswer);
+                    item->setTextAlignment(Qt::AlignCenter);
+                    generalModel->setItem(row, 1, item);
+
+                    break;
+                }
+            }
+
+            SC_n = -1;
+        }
+    }
+
+    if((UPCODE == I1 || UPCODE == I2 || UPCODE == I3) && (SC_n == 4 || SC_n == 5)){
+        GAR = ui->gar_label->text();
+        IR = ui->ir_label->text();
+        FUNCT3 = ui->funct3_label->text();
+        QString IMM = ui->imm_label->text();
+        QString RS1 = IR.mid(12,5);
+
+        int addr1 = RS1.toInt(nullptr, 2);
+        int garIndex = GAR.toInt(nullptr, 2);
+        QString targetRegister1 = QString("x%1").arg(addr1);
+        QString targetRegisterGAR = QString("x%1").arg(garIndex);
+
+        QStandardItemModel* generalModel = qobject_cast<QStandardItemModel*>(ui->general_table->model());
+
+        for (int row = 0; row < generalModel->rowCount(); ++row) {
+            QString addrInTable = generalModel->item(row, 0)->text();
+            if (addrInTable == targetRegister1) {
+                RS1 = generalModel->item(row, 1)->text();
+                break;
+            }
+        }
+
+        //addi
+        if(UPCODE == I1 && FUNCT3 == "000" && SC_n == 4){
+            int IMM_V = binaryToSignedInt(IMM);
+            int RS1_V = binaryToSignedInt(RS1);
+            int answer = RS1_V + IMM_V;
+
+            QString binaryAnswer = QString("%1").arg(static_cast<quint32>(answer), 32, 2, QChar('0'));
+
+            for (int row = 0; row < generalModel->rowCount(); ++row) {
+                QString addrInTable = generalModel->item(row, 0)->text();
+                if (addrInTable == targetRegisterGAR) {
+                    QStandardItem* item = new QStandardItem(binaryAnswer);
+                    item->setTextAlignment(Qt::AlignCenter);
+                    generalModel->setItem(row, 1, item);
+
+                    break;
+                }
+            }
+
+            SC_n = -1;
+        }
+
+        if(UPCODE == I2 && (FUNCT3 == "001" || FUNCT3 == "010") && SC_n == 4){
+            int IMM_V = binaryToSignedInt(IMM);
+            int RS1_V = binaryToSignedInt(RS1);
+            int address = RS1_V + IMM_V;
+
+            quint16 address_16bit = static_cast<quint16>(address);
+
+            QString binaryAnswer = QString("%1").arg(address_16bit, 16, 2, QChar('0'));
+
+            ui->mar_label->setText(binaryAnswer);
+        }
+
+        //lh
+        if(UPCODE == I2 && FUNCT3 == "001" && SC_n == 5){
+            QString answer;
+            MAR = ui->mar_label->text();
+            int marAddr = MAR.toInt(nullptr, 2);
+
+            QStandardItemModel* model = qobject_cast<QStandardItemModel*>(ui->ram_table->model());
+
+            for (int offset = 1; offset >= 0; --offset) {
+                int targetAddr = marAddr + offset;
+                QString addrStr = QString("0x%1").arg(targetAddr, 4, 16, QChar('0'));
+
+                for (int row = 0; row < model->rowCount(); ++row) {
+                    QString addrInTable = model->item(row, 0)->text();
+                    if (addrInTable == addrStr) {
+                        answer += model->item(row, 1)->text();
+                        break;
+                    }
+                }
+            }
+
+            QString binaryAnswer = "0000000000000000" + answer;
+
+            for (int row = 0; row < generalModel->rowCount(); ++row) {
+                QString addrInTable = generalModel->item(row, 0)->text();
+                if (addrInTable == targetRegisterGAR) {
+                    QStandardItem* item = new QStandardItem(binaryAnswer);
+                    item->setTextAlignment(Qt::AlignCenter);
+                    generalModel->setItem(row, 1, item);
+
+                    break;
+                }
+            }
+
+            SC_n = -1;
+        }
+
+        //lw
+        if(UPCODE == I2 && FUNCT3 == "010" && SC_n == 5){
+            QString answer;
+            MAR = ui->mar_label->text();
+            int marAddr = MAR.toInt(nullptr, 2);
+
+            QStandardItemModel* model = qobject_cast<QStandardItemModel*>(ui->ram_table->model());
+
+            for (int offset = 3; offset >= 0; --offset) {
+                int targetAddr = marAddr + offset;
+                QString addrStr = QString("0x%1").arg(targetAddr, 4, 16, QChar('0'));
+
+                for (int row = 0; row < model->rowCount(); ++row) {
+                    QString addrInTable = model->item(row, 0)->text();
+                    if (addrInTable == addrStr) {
+                        answer += model->item(row, 1)->text();
+                        break;
+                    }
+                }
+            }
+
+            QString binaryAnswer = answer;
+
+            for (int row = 0; row < generalModel->rowCount(); ++row) {
+                QString addrInTable = generalModel->item(row, 0)->text();
+                if (addrInTable == targetRegisterGAR) {
+                    QStandardItem* item = new QStandardItem(binaryAnswer);
+                    item->setTextAlignment(Qt::AlignCenter);
+                    generalModel->setItem(row, 1, item);
+
+                    break;
+                }
+            }
+
+            SC_n = -1;
+        }
+
+        //jalr
+        if(UPCODE == I3 && FUNCT3 == "000" && SC_n == 4){
+            PC = ui->pc_label->text();
+            quint16 PC_V_16bit = static_cast<quint16>(PC.toUInt(nullptr, 2));
+            quint32 rd_value = static_cast<quint32>(PC_V_16bit) + 4;
+
+            QString binaryAnswer = QString("%1").arg(rd_value, 32, 2, QChar('0'));
+
+
+            for (int row = 0; row < generalModel->rowCount(); ++row) {
+                QString addrInTable = generalModel->item(row, 0)->text();
+                if (addrInTable == targetRegisterGAR) {
+                    QStandardItem* item = new QStandardItem(binaryAnswer);
+                    item->setTextAlignment(Qt::AlignCenter);
+                    generalModel->setItem(row, 1, item);
+
+                    break;
+                }
+            }
+        }
+        if(UPCODE == I3 && FUNCT3 == "000" && SC_n == 5){
+            PC = ui->pc_label->text();
+            int IMM_V = binaryToSignedInt(IMM);
+            int RS1_V = binaryToSignedInt(RS1);
+            int address = RS1_V + IMM_V;
+
+            quint16 address_16bit = static_cast<quint16>(address);
+
+            QString binaryAnswer = QString("%1").arg(address_16bit, 16, 2, QChar('0'));
+
+            ui->pc_label->setText(binaryAnswer);
+
+            SC_n = -1;
+        }
+
+    }
+
+    if(UPCODE == S && (SC_n == 4 || SC_n == 5)){
+        IR = ui->ir_label->text();
+        FUNCT3 = ui->funct3_label->text();
+        QString IMM = ui->imm_label->text();
+        QString RS1 = IR.mid(12,5);
+        QString RS2 = IR.mid(7,5);
+
+        int addr1 = RS1.toInt(nullptr, 2);
+        int addr2 = RS2.toInt(nullptr, 2);
+
+        QString targetRegister1 = QString("x%1").arg(addr1);
+        QString targetRegister2 = QString("x%1").arg(addr2);
+
+        QStandardItemModel* generalModel = qobject_cast<QStandardItemModel*>(ui->general_table->model());
+
+        for (int row = 0; row < generalModel->rowCount(); ++row) {
+            QString addrInTable = generalModel->item(row, 0)->text();
+            if (addrInTable == targetRegister1) {
+                RS1 = generalModel->item(row, 1)->text();
+            }
+            if(addrInTable == targetRegister2){
+                RS2 = generalModel->item(row, 1)->text();
+            }
+        }
+
+        if(SC_n == 4){
+            int IMM_V = binaryToSignedInt(IMM);
+            int RS1_V = binaryToSignedInt(RS1);
+            int address = RS1_V + IMM_V;
+
+            quint16 address_16bit = static_cast<quint16>(address);
+
+            QString binaryAnswer = QString("%1").arg(address_16bit, 16, 2, QChar('0'));
+
+            ui->mar_label->setText(binaryAnswer);
+        }
+
+        //sh
+        if(FUNCT3 == "001" && SC_n == 5){
+            MAR = ui->mar_label->text();
+            quint16 MAR_addr = MAR.toUInt(nullptr, 2);
+
+            quint32 RS2_val = RS2.toUInt(nullptr, 2);
+
+            quint8 low_byte = RS2_val & 0xFF;          // [7:0]
+            quint8 high_byte = (RS2_val >> 8) & 0xFF;  // [15:8]
+
+            QString addr0 = QString("0x%1").arg(MAR_addr, 4, 16, QLatin1Char('0')).toLower();
+            QString addr1 = QString("0x%1").arg(MAR_addr + 1, 4, 16, QLatin1Char('0')).toLower();
+
+            QStandardItemModel* ramModel = qobject_cast<QStandardItemModel*>(ui->ram_table->model());
+
+            for (int row = 0; row < ramModel->rowCount(); ++row) {
+                QString rowAddr = ramModel->item(row, 0)->text().toLower();
+
+                if (rowAddr == addr0) {
+                    QString val = QString("%1").arg(low_byte, 8, 2, QLatin1Char('0')).toLower();
+                    QStandardItem* item = new QStandardItem(val);
+                    item->setTextAlignment(Qt::AlignCenter);
+                    ramModel->setItem(row, 1, item);
+                }
+
+                if (rowAddr == addr1) {
+                    QString val = QString("%1").arg(high_byte, 8, 2, QLatin1Char('0')).toLower();
+                    QStandardItem* item = new QStandardItem(val);
+                    item->setTextAlignment(Qt::AlignCenter);
+                    ramModel->setItem(row, 1, item);
+                }
+            }
+
+            SC_n = -1;
+        }
+
+        //sw
+        if (FUNCT3 == "010" && SC_n == 5) {
+            MAR = ui->mar_label->text();
+            quint16 MAR_addr = MAR.toUInt(nullptr, 2);
+
+            quint32 RS2_val = RS2.toUInt(nullptr, 2);
+
+            quint8 byte0 = (RS2_val) & 0xFF;         // [7:0]
+            quint8 byte1 = (RS2_val >> 8) & 0xFF;    // [15:8]
+            quint8 byte2 = (RS2_val >> 16) & 0xFF;   // [23:16]
+            quint8 byte3 = (RS2_val >> 24) & 0xFF;   // [31:24]
+
+            QString addr0 = QString("0x%1").arg(MAR_addr, 4, 16, QLatin1Char('0')).toLower();
+            QString addr1 = QString("0x%1").arg(MAR_addr + 1, 4, 16, QLatin1Char('0')).toLower();
+            QString addr2 = QString("0x%1").arg(MAR_addr + 2, 4, 16, QLatin1Char('0')).toLower();
+            QString addr3 = QString("0x%1").arg(MAR_addr + 3, 4, 16, QLatin1Char('0')).toLower();
+
+            QStandardItemModel* ramModel = qobject_cast<QStandardItemModel*>(ui->ram_table->model());
+
+            for (int row = 0; row < ramModel->rowCount(); ++row) {
+                QString rowAddr = ramModel->item(row, 0)->text().toLower();
+
+                if (rowAddr == addr0) {
+                    QString val = QString("%1").arg(byte0, 8, 2, QChar('0'));  // 8-bit binary
+                    QStandardItem* item = new QStandardItem(val);
+                    item->setTextAlignment(Qt::AlignCenter);
+                    ramModel->setItem(row, 1, item);
+                }
+                else if (rowAddr == addr1) {
+                    QString val = QString("%1").arg(byte1, 8, 2, QChar('0'));
+                    QStandardItem* item = new QStandardItem(val);
+                    item->setTextAlignment(Qt::AlignCenter);
+                    ramModel->setItem(row, 1, item);
+                }
+                else if (rowAddr == addr2) {
+                    QString val = QString("%1").arg(byte2, 8, 2, QChar('0'));
+                    QStandardItem* item = new QStandardItem(val);
+                    item->setTextAlignment(Qt::AlignCenter);
+                    ramModel->setItem(row, 1, item);
+                }
+                else if (rowAddr == addr3) {
+                    QString val = QString("%1").arg(byte3, 8, 2, QChar('0'));
+                    QStandardItem* item = new QStandardItem(val);
+                    item->setTextAlignment(Qt::AlignCenter);
+                    ramModel->setItem(row, 1, item);
+                }
+            }
+
+            SC_n = -1;
+        }
+
+    }
+
+    if(UPCODE == B && (SC_n == 4 || SC_n == 5)){
+        IR = ui->ir_label->text();
+        FUNCT3 = ui->funct3_label->text();
+        PC = ui->pc_label->text();
+        QString IMM = ui->imm_label->text();
+
+        QString RS1 = IR.mid(12,5);
+        QString RS2 = IR.mid(7,5);
+
+        int addr1 = RS1.toInt(nullptr, 2);
+        int addr2 = RS2.toInt(nullptr, 2);
+
+        QString targetRegister1 = QString("x%1").arg(addr1);
+        QString targetRegister2 = QString("x%1").arg(addr2);
+
+        QStandardItemModel* generalModel = qobject_cast<QStandardItemModel*>(ui->general_table->model());
+
+        for (int row = 0; row < generalModel->rowCount(); ++row) {
+            QString addrInTable = generalModel->item(row, 0)->text();
+            if (addrInTable == targetRegister1) {
+                RS1 = generalModel->item(row, 1)->text();
+            }
+            if(addrInTable == targetRegister2){
+                RS2 = generalModel->item(row, 1)->text();
+            }
+        }
+
+        if((FUNCT3 == "000" || FUNCT3 == "001" || FUNCT3 == "100" || FUNCT3 == "101") && SC_n == 4){
+            int RS1_V = binaryToSignedInt(RS1);
+            int RS2_V = binaryToSignedInt(RS2);
+            int answer = RS1_V - RS2_V ;
+
+            if(answer > 0){
+                P = 1;
+            }
+            else{
+                P = 0;
+            }
+
+            if(answer < 0){
+                N = 1;
+            }
+            else{
+                N = 0;
+            }
+
+            if(answer == 0){
+                Z = 1;
+            }
+            else{
+                Z = 0;
+            }
+        }
+
+        if((FUNCT3 == "110" || FUNCT3 == "111") && SC_n == 4){
+            quint32 RS1_V = RS1.toUInt(nullptr, 2);
+            quint32 RS2_V = RS2.toUInt(nullptr, 2);
+
+            int answer = RS1_V - RS2_V ;
+
+            if(answer > 0){
+                P = 1;
+            }
+            else{
+                P = 0;
+            }
+
+            if(answer < 0){
+                N = 1;
+            }
+            else{
+                N = 0;
+            }
+
+            if(answer == 0){
+                Z = 1;
+            }
+            else{
+                Z = 0;
+            }
+        }
+
+        //beq
+        if(FUNCT3 == "000" && Z == 1 && SC_n == 5){
+            quint16 PC_V = PC.toUInt(nullptr, 2);
+            PC_V = PC_V - 4;
+            quint16 IMM_V = IMM.toUInt(nullptr, 2);
+            quint32 sum = static_cast<quint32>(PC_V) + static_cast<quint32>(IMM_V);
+            quint16 answer = static_cast<quint16>(sum);
+
+            QString binaryAnswer = QString("%1").arg(answer, 16, 2, QChar('0'));
+
+            ui->pc_label->setText(binaryAnswer);
+
+            SC_n = -1;
+        }
+
+        //bne
+        if(FUNCT3 == "001" && Z == 0 && SC_n == 5){
+            quint16 PC_V = PC.toUInt(nullptr, 2);
+            PC_V = PC_V - 4;
+            quint16 IMM_V = IMM.toUInt(nullptr, 2);
+            quint32 sum = static_cast<quint32>(PC_V) + static_cast<quint32>(IMM_V);
+            quint16 answer = static_cast<quint16>(sum);
+
+            QString binaryAnswer = QString("%1").arg(answer, 16, 2, QChar('0'));
+
+            ui->pc_label->setText(binaryAnswer);
+
+            SC_n = -1;
+        }
+
+        //blt
+        if(FUNCT3 == "100" && N == 1 && SC_n == 5){
+            quint16 PC_V = PC.toUInt(nullptr, 2);
+            PC_V = PC_V - 4;
+            quint16 IMM_V = IMM.toUInt(nullptr, 2);
+            quint32 sum = static_cast<quint32>(PC_V) + static_cast<quint32>(IMM_V);
+            quint16 answer = static_cast<quint16>(sum);
+
+            QString binaryAnswer = QString("%1").arg(answer, 16, 2, QChar('0'));
+
+            ui->pc_label->setText(binaryAnswer);
+
+            SC_n = -1;
+        }
+
+        //bge
+        if(FUNCT3 == "101" && N == 0 && SC_n == 5){
+            quint16 PC_V = PC.toUInt(nullptr, 2);
+            PC_V = PC_V - 4;
+            quint16 IMM_V = IMM.toUInt(nullptr, 2);
+            quint32 sum = static_cast<quint32>(PC_V) + static_cast<quint32>(IMM_V);
+            quint16 answer = static_cast<quint16>(sum);
+
+            QString binaryAnswer = QString("%1").arg(answer, 16, 2, QChar('0'));
+
+            ui->pc_label->setText(binaryAnswer);
+
+            SC_n = -1;
+        }
+
+        //bltu
+        if(FUNCT3 == "110" && N == 1 && SC_n == 5){
+            quint16 PC_V = PC.toUInt(nullptr, 2);
+            PC_V = PC_V - 4;
+            quint16 IMM_V = IMM.toUInt(nullptr, 2);
+            quint32 sum = static_cast<quint32>(PC_V) + static_cast<quint32>(IMM_V);
+            quint16 answer = static_cast<quint16>(sum);
+
+            QString binaryAnswer = QString("%1").arg(answer, 16, 2, QChar('0'));
+
+            ui->pc_label->setText(binaryAnswer);
+
+            SC_n = -1;
+        }
+
+        //bgeu
+        if(FUNCT3 == "111" && N == 0 && SC_n == 5){
+            quint16 PC_V = PC.toUInt(nullptr, 2);
+            PC_V = PC_V - 4;
+            quint16 IMM_V = IMM.toUInt(nullptr, 2);
+            quint32 sum = static_cast<quint32>(PC_V) + static_cast<quint32>(IMM_V);
+            quint16 answer = static_cast<quint16>(sum);
+
+            QString binaryAnswer = QString("%1").arg(answer, 16, 2, QChar('0'));
+
+            ui->pc_label->setText(binaryAnswer);
+
+            SC_n = -1;
+        }
+    }
+
+    //jal
+    if(UPCODE == J && SC_n == 4){
+        IR = ui->ir_label->text();
+        PC = ui->pc_label->text();
+        GAR = ui->gar_label->text();
+
+        int garIndex = GAR.toInt(nullptr, 2);
+
+        QString targetRegisterGAR = QString("x%1").arg(garIndex);
+
+        quint16 PC_V = PC.toUInt(nullptr, 2);
+
+        quint32 sum = static_cast<quint32>(PC_V) + static_cast<quint32>(4);
+
+        QString binaryAnswer = QString("%1").arg((sum), 32, 2, QChar('0'));
+
+        QStandardItemModel* generalModel = qobject_cast<QStandardItemModel*>(ui->general_table->model());
+
+        for (int row = 0; row < generalModel->rowCount(); ++row) {
+            QString addrInTable = generalModel->item(row, 0)->text();
+            if (addrInTable == targetRegisterGAR) {
+                QStandardItem* item = new QStandardItem(binaryAnswer);
+                item->setTextAlignment(Qt::AlignCenter);
+                generalModel->setItem(row, 1, item);
+
+                break;
+            }
+        }
+    }
+    if(UPCODE == J && SC_n == 5){
+        IR = ui->ir_label->text();
+        PC = ui->pc_label->text();
+        QString IMM = ui->imm_label->text();
+
+        int IMM_V = binaryToSignedInt(IMM);
+        quint16 PC_V = PC.toUInt(nullptr, 2);
+
+        int sum = PC_V + IMM_V;
+
+        quint16 result = static_cast<quint16>(sum);
+        QString binaryAnswer = QString("%1").arg(result, 16, 2, QChar('0'));
+
+        ui->pc_label->setText(binaryAnswer);
+
+        SC_n = -1;
+    }
+
+    //lui
+    if(UPCODE == U1 && SC_n == 4){
+        IR = ui->ir_label->text();
+        GAR = ui->gar_label->text();
+        QString IMM = ui->imm_label->text();
+        int IMM_V = binaryToSignedInt(IMM);
+
+        qint32 result = static_cast<qint32>(IMM_V) << 12;
+
+        QString binaryAnswer = QString("%1").arg((result), 32, 2, QChar('0'));
+
+        int garIndex = GAR.toInt(nullptr, 2);
+
+        QString targetRegisterGAR = QString("x%1").arg(garIndex);
+
+        QStandardItemModel* generalModel = qobject_cast<QStandardItemModel*>(ui->general_table->model());
+
+        for (int row = 0; row < generalModel->rowCount(); ++row) {
+            QString addrInTable = generalModel->item(row, 0)->text();
+            if (addrInTable == targetRegisterGAR) {
+                QStandardItem* item = new QStandardItem(binaryAnswer);
+                item->setTextAlignment(Qt::AlignCenter);
+                generalModel->setItem(row, 1, item);
+
+                break;
+            }
+        }
+
+        SC_n = -1;
+    }
+
+    //auipc
+    if(UPCODE == U2 && SC_n == 4){
+        IR = ui->ir_label->text();
+        QString IMM = ui->imm_label->text();
+
+        int IMM_V = binaryToSignedInt(IMM);
+        qint32 result = static_cast<qint32>(IMM_V) << 12;
+
+        QString binaryAnswer = QString("%1").arg((result), 32, 2, QChar('0'));
+
+        ui->imm_label->setText(binaryAnswer);
+    }
+    if(UPCODE == U2 && SC_n == 5){
+        IR = ui->ir_label->text();
+        PC = ui->pc_label->text();
+        GAR = ui->gar_label->text();
+        QString IMM = ui->imm_label->text();
+
+        int IMM_V = binaryToSignedInt(IMM);
+        quint16 PC_V = PC.toUInt(nullptr, 2);
+
+        quint32 sum = static_cast<quint32>(PC_V) + static_cast<quint32>(IMM_V);
+
+        QString binaryAnswer = QString("%1").arg((sum), 32, 2, QChar('0'));
+
+        int garIndex = GAR.toInt(nullptr, 2);
+
+        QString targetRegisterGAR = QString("x%1").arg(garIndex);
+
+        QStandardItemModel* generalModel = qobject_cast<QStandardItemModel*>(ui->general_table->model());
+
+        for (int row = 0; row < generalModel->rowCount(); ++row) {
+            QString addrInTable = generalModel->item(row, 0)->text();
+            if (addrInTable == targetRegisterGAR) {
+                QStandardItem* item = new QStandardItem(binaryAnswer);
+                item->setTextAlignment(Qt::AlignCenter);
+                generalModel->setItem(row, 1, item);
+
+                break;
+            }
+        }
+
+        SC_n = -1;
+    }
+}
+
+
+void MainWindow::on_reset_btn_clicked()
+{
+    ui->pc_label->setText("0001000000000000");
+    ui->funct7_label->setText("0000000");
+    ui->funct3_label->setText("000");
+    ui->gar_label->setText("00000");
+    ui->ir_label->setText("00000000000000000000000000000000");
+    ui->mar_label->setText("0000000000000000");
+    ui->upcode_label->setText("0000000");
+    ui->imm_label->setText("\\-");
+    ui->sc_label->setText("\\- \\- \\-");
+    ui->inpr_label->setText("00000000000000000000000000000000");
+    ui->outr_label->setText("00000000000000000000000000000000");
+}
+
+
+void MainWindow::on_stop_btn_clicked()
+{
+    stopflag = 1;
+}
+
+
+void MainWindow::on_load_btn_clicked()
+{
+    // Load binary data and show in ram_table
+    QFile file("output.bin");
+    if (!file.open(QIODevice::ReadOnly)) {
+        qDebug() << "Failed to open output.bin";
+        return;
+    }
+
+    QByteArray binaryData = file.readAll();
+    file.close();
+
+    const int maxAddress = 0xFFFF + 1;
+
+    QStandardItemModel* model = new QStandardItemModel();
+    model->setRowCount(maxAddress);
+    model->setColumnCount(2);
+
+    model->setHeaderData(0, Qt::Horizontal, "Address");
+    model->setHeaderData(1, Qt::Horizontal, "Binary Data");
+
+    for (int i = 0; i < maxAddress; ++i) {
+        QString binStr;
+
+        if (i < binaryData.size()) {
+            uint8_t byte = static_cast<uint8_t>(binaryData[i]);
+            for (int bit = 7; bit >= 0; --bit) {
+                binStr += ((byte & (1 << bit)) ? '1' : '0');
+            }
+        } else {
+            binStr = "00000000";
+        }
+
+        QString addrStr = QString("0x%1").arg(i, 4, 16, QLatin1Char('0'));
+
+        QStandardItem* addrItem = new QStandardItem(addrStr);
+        addrItem->setTextAlignment(Qt::AlignCenter);
+
+        QStandardItem* binItem = new QStandardItem(binStr);
+        binItem->setTextAlignment(Qt::AlignCenter);
+
+        model->setItem(i, 0, addrItem);
+        model->setItem(i, 1, binItem);
+    }
+
+    ui->ram_table->setModel(model);
+    ui->ram_table->verticalHeader()->setVisible(false);
+    ui->ram_table->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+
+    ui->ram_table->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Fixed);
+    ui->ram_table->horizontalHeader()->resizeSection(0, 100);
+    ui->ram_table->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
+
+    ui->ram_table->setEditTriggers(QAbstractItemView::NoEditTriggers);
+
+
+    //general purpose set
+    QStandardItemModel* generalModel = new QStandardItemModel();
+    generalModel->setRowCount(32);
+    generalModel->setColumnCount(2);
+
+    generalModel->setHeaderData(0, Qt::Horizontal, "Address");
+    generalModel->setHeaderData(1, Qt::Horizontal, "Binary Data");
+
+    for (int i = 0; i < 32; ++i) {
+        QString addrStr = QString("x%1").arg(i, 0, 10);
+
+        QString binStr = QString("00000000000000000000000000000000"); // 32 بیت صفر
+
+        QStandardItem* addrItem = new QStandardItem(addrStr);
+        addrItem->setTextAlignment(Qt::AlignCenter);
+
+        QStandardItem* binItem = new QStandardItem(binStr);
+        binItem->setTextAlignment(Qt::AlignCenter);
+
+        generalModel->setItem(i, 0, addrItem);
+        generalModel->setItem(i, 1, binItem);
+    }
+
+    ui->general_table->setModel(generalModel);
+
+    ui->general_table->verticalHeader()->setVisible(false);
+    ui->general_table->setEditTriggers(QAbstractItemView::NoEditTriggers);
+
+    ui->general_table->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Fixed);
+    ui->general_table->horizontalHeader()->resizeSection(0, 100);
+
+    ui->general_table->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
+    ui->general_table->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+}
+
