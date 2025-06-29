@@ -13,6 +13,67 @@
   <property name="windowTitle">
    <string>MainWindow</string>
   </property>
+  <property name="styleSheet">
+   <string notr="true">QPushButton:disabled {
+    background-color: #3A3A4A;
+    color: #888;
+}
+QLineEdit {
+    background-color: #2C2C3C;
+    color: white;
+    border: 1px solid #4C4C5C;
+    padding: 6px;
+    border-radius: 6px;
+}
+QPlainTextEdit, QTextEdit {
+    background-color: #2C2C3C;
+    color: white;
+    border: 1px solid #4C4C5C;
+    padding: 8px;
+    border-radius: 6px;
+    font-family: Consolas;
+    font-size: 13px;
+}
+QWidget {
+    background-color: #1E1E2E;
+    color: white;
+    font-family: &quot;Segoe UI&quot;;
+}
+QLabel {
+    color: #FFFFFF;
+    font-weight: 500;
+}
+QTableView {
+    background-color: #2C2C3C;
+    color: white;
+    border: 1px solid #4C4C5C;
+    gridline-color: #4C4C5C;
+    selection-background-color: #4C78FF;
+    selection-color: white;
+    alternate-background-color: #2A2A3A;
+    font-family: Consolas;
+    font-size: 13px;
+}
+QHeaderView::section {
+    background-color: #1E1E2E;
+    color: white;
+    padding: 6px;
+    border: 1px solid #4C4C5C;
+    font-weight: bold;
+}
+QTableView::item:selected {
+    background-color: #4C78FF;
+    color: white;
+}
+QTableView::item {
+    padding: 4px;
+    border: none;
+}
+
+
+
+</string>
+  </property>
   <property name="iconSize">
    <size>
     <width>30</width>
@@ -55,6 +116,20 @@
         <property name="cursor">
          <cursorShape>PointingHandCursor</cursorShape>
         </property>
+        <property name="styleSheet">
+         <string notr="true">QPushButton {
+    background-color: #4C78FF;
+    color: white;
+    border: 2px solid rgb(76, 120, 255);
+    padding: 8px 16px;
+    border-radius: 6px;
+    font-weight: bold;
+}
+QPushButton:hover {
+    background-color: #1E1E2E;
+    border: 2px solid rgb(76, 120, 255);
+}</string>
+        </property>
         <property name="text">
          <string>Compile</string>
         </property>
@@ -70,6 +145,20 @@
         </property>
         <property name="cursor">
          <cursorShape>PointingHandCursor</cursorShape>
+        </property>
+        <property name="styleSheet">
+         <string notr="true">QPushButton {
+    background-color: #4C78FF;
+    color: white;
+    border: 2px solid rgb(76, 120, 255);
+    padding: 8px 16px;
+    border-radius: 6px;
+    font-weight: bold;
+}
+QPushButton:hover {
+    background-color: #1E1E2E;
+    border: 2px solid rgb(76, 120, 255);
+}</string>
         </property>
         <property name="text">
          <string>Load</string>
@@ -87,6 +176,20 @@
         <property name="cursor">
          <cursorShape>PointingHandCursor</cursorShape>
         </property>
+        <property name="styleSheet">
+         <string notr="true">QPushButton {
+    background-color: #4C78FF;
+    color: white;
+    border: 2px solid rgb(76, 120, 255);
+    padding: 8px 16px;
+    border-radius: 6px;
+    font-weight: bold;
+}
+QPushButton:hover {
+    background-color: #1E1E2E;
+    border: 2px solid rgb(76, 120, 255);
+}</string>
+        </property>
         <property name="text">
          <string>Run</string>
         </property>
@@ -102,6 +205,20 @@
         </property>
         <property name="cursor">
          <cursorShape>PointingHandCursor</cursorShape>
+        </property>
+        <property name="styleSheet">
+         <string notr="true">QPushButton {
+    background-color: #4C78FF;
+    color: white;
+    border: 2px solid rgb(76, 120, 255);
+    padding: 8px 16px;
+    border-radius: 6px;
+    font-weight: bold;
+}
+QPushButton:hover {
+    background-color: #1E1E2E;
+    border: 2px solid rgb(76, 120, 255);
+}</string>
         </property>
         <property name="text">
          <string>Stop</string>
@@ -119,6 +236,20 @@
         <property name="cursor">
          <cursorShape>PointingHandCursor</cursorShape>
         </property>
+        <property name="styleSheet">
+         <string notr="true">QPushButton {
+    background-color: #4C78FF;
+    color: white;
+    border: 2px solid rgb(76, 120, 255);
+    padding: 8px 16px;
+    border-radius: 6px;
+    font-weight: bold;
+}
+QPushButton:hover {
+    background-color: #1E1E2E;
+    border: 2px solid rgb(76, 120, 255);
+}</string>
+        </property>
         <property name="text">
          <string>Reset</string>
         </property>
@@ -134,6 +265,20 @@
         </property>
         <property name="cursor">
          <cursorShape>PointingHandCursor</cursorShape>
+        </property>
+        <property name="styleSheet">
+         <string notr="true">QPushButton {
+    background-color: #4C78FF;
+    color: white;
+    border: 2px solid rgb(76, 120, 255);
+    padding: 8px 16px;
+    border-radius: 6px;
+    font-weight: bold;
+}
+QPushButton:hover {
+    background-color: #1E1E2E;
+    border: 2px solid rgb(76, 120, 255);
+}</string>
         </property>
         <property name="text">
          <string>Clock</string>
@@ -186,7 +331,7 @@
         <property name="maximumSize">
          <size>
           <width>16777215</width>
-          <height>50</height>
+          <height>80</height>
          </size>
         </property>
         <property name="readOnly">
@@ -206,7 +351,7 @@
         <property name="maximumSize">
          <size>
           <width>16777215</width>
-          <height>50</height>
+          <height>45</height>
          </size>
         </property>
        </widget>
@@ -223,7 +368,7 @@
         <property name="maximumSize">
          <size>
           <width>16777215</width>
-          <height>50</height>
+          <height>45</height>
          </size>
         </property>
         <property name="readOnly">
@@ -300,6 +445,10 @@
         </item>
         <item row="2" column="1">
          <widget class="QLabel" name="funct3_label">
+          <property name="styleSheet">
+           <string notr="true">border-radius: 3px;
+border : 1px solid #4C4C5C</string>
+          </property>
           <property name="text">
            <string>000</string>
           </property>
@@ -313,6 +462,10 @@
         </item>
         <item row="4" column="1">
          <widget class="QLabel" name="ir_label">
+          <property name="styleSheet">
+           <string notr="true">border-radius: 3px;
+border : 1px solid #4C4C5C</string>
+          </property>
           <property name="text">
            <string>00000000000000000000000000000000</string>
           </property>
@@ -326,6 +479,10 @@
         </item>
         <item row="7" column="1">
          <widget class="QLabel" name="imm_label">
+          <property name="styleSheet">
+           <string notr="true">border-radius: 3px;
+border : 1px solid #4C4C5C</string>
+          </property>
           <property name="text">
            <string>\-</string>
           </property>
@@ -358,6 +515,10 @@
         </item>
         <item row="1" column="1">
          <widget class="QLabel" name="funct7_label">
+          <property name="styleSheet">
+           <string notr="true">border-radius: 3px;
+border : 1px solid #4C4C5C</string>
+          </property>
           <property name="text">
            <string>0000000</string>
           </property>
@@ -371,6 +532,10 @@
         </item>
         <item row="6" column="1">
          <widget class="QLabel" name="upcode_label">
+          <property name="styleSheet">
+           <string notr="true">border-radius: 3px;
+border : 1px solid #4C4C5C</string>
+          </property>
           <property name="text">
            <string>0000000</string>
           </property>
@@ -384,6 +549,10 @@
         </item>
         <item row="8" column="1">
          <widget class="QLabel" name="sc_label">
+          <property name="styleSheet">
+           <string notr="true">border-radius: 3px;
+border : 1px solid #4C4C5C</string>
+          </property>
           <property name="text">
            <string>\- \- \-</string>
           </property>
@@ -424,9 +593,13 @@
          <widget class="QLabel" name="mar_label">
           <property name="maximumSize">
            <size>
-            <width>217</width>
+            <width>16777215</width>
             <height>16777215</height>
            </size>
+          </property>
+          <property name="styleSheet">
+           <string notr="true">border-radius: 3px;
+border : 1px solid #4C4C5C</string>
           </property>
           <property name="text">
            <string>0000000000000000</string>
@@ -441,6 +614,10 @@
         </item>
         <item row="3" column="1">
          <widget class="QLabel" name="gar_label">
+          <property name="styleSheet">
+           <string notr="true">border-radius: 3px;
+border : 1px solid #4C4C5C</string>
+          </property>
           <property name="text">
            <string>00000</string>
           </property>
@@ -454,6 +631,10 @@
         </item>
         <item row="9" column="1">
          <widget class="QLabel" name="inpr_label">
+          <property name="styleSheet">
+           <string notr="true">border-radius: 3px;
+border : 1px solid #4C4C5C</string>
+          </property>
           <property name="text">
            <string>00000000000000000000000000000000</string>
           </property>
@@ -473,6 +654,9 @@
             <height>16777215</height>
            </size>
           </property>
+          <property name="styleSheet">
+           <string notr="true"/>
+          </property>
           <property name="text">
            <string>FUNCT3</string>
           </property>
@@ -486,6 +670,10 @@
         </item>
         <item row="0" column="1">
          <widget class="QLabel" name="pc_label">
+          <property name="styleSheet">
+           <string notr="true">border-radius: 3px;
+border : 1px solid #4C4C5C</string>
+          </property>
           <property name="text">
            <string>0001000000000000</string>
           </property>
@@ -562,6 +750,9 @@
             <height>16777215</height>
            </size>
           </property>
+          <property name="styleSheet">
+           <string notr="true"/>
+          </property>
           <property name="text">
            <string>GAR</string>
           </property>
@@ -575,6 +766,10 @@
         </item>
         <item row="10" column="1">
          <widget class="QLabel" name="outr_label">
+          <property name="styleSheet">
+           <string notr="true">border-radius: 3px;
+border : 1px solid #4C4C5C</string>
+          </property>
           <property name="text">
            <string>00000000000000000000000000000000</string>
           </property>
@@ -667,12 +862,24 @@
        </widget>
       </item>
       <item>
-       <widget class="QTextEdit" name="clock_field">
-        <property name="maximumSize">
-         <size>
-          <width>100</width>
-          <height>30</height>
-         </size>
+       <widget class="QSpinBox" name="clock_field">
+        <property name="styleSheet">
+         <string notr="true">background-color: #2C2C3C;
+    color: white;
+    border: 1px solid #4C4C5C;
+    padding: 8px;
+    border-radius: 6px;
+    font-family: Consolas;
+    font-size: 13px;</string>
+        </property>
+        <property name="minimum">
+         <number>1</number>
+        </property>
+        <property name="maximum">
+         <number>100000</number>
+        </property>
+        <property name="value">
+         <number>1000</number>
         </property>
        </widget>
       </item>
