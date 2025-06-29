@@ -71,14 +71,39 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     };
 
     regMap = {
-        {"x0", 0}, {"x1", 1}, {"x2", 2}, {"x3", 3}, {"x4", 4},
-        {"x5", 5}, {"x6", 6}, {"x7", 7}, {"x8", 8}, {"x9", 9},
-        {"x10", 10}, {"x11", 11}, {"x12", 12}, {"x13", 13}, {"x14", 14},
-        {"x15", 15}, {"x16", 16}, {"x17", 17}, {"x18", 18}, {"x19", 19},
-        {"x20", 20}, {"x21", 21}, {"x22", 22}, {"x23", 23}, {"x24", 24},
-        {"x25", 25}, {"x26", 26}, {"x27", 27}, {"x28", 28}, {"x29", 29},
-        {"x30", 30}, {"x31", 31}
-    };
+        {"x0", 0}, {"zero", 0},    // Map "zero" to x0
+        {"x1", 1}, {"ra", 1},      // Map "ra" to x1
+        {"x2", 2}, {"sp", 2},      // Map "sp" to x2
+        {"x3", 3}, {"gp", 3},      // Map "gp" to x3
+        {"x4", 4}, {"tp", 4},      // Map "tp" to x4
+        {"x5", 5}, {"t0", 5},      // Map "t0" to x5
+        {"x6", 6}, {"t1", 6},      // Map "t1" to x6
+        {"x7", 7}, {"t2", 7},      // Map "t2" to x7
+        {"x8", 8}, {"s0", 8}, {"fp", 8},  // Map "s0" and "fp" to x8
+        {"x9", 9}, {"s1", 9},      // Map "s1" to x9
+        {"x10", 10}, {"a0", 10},   // Map "a0" to x10
+        {"x11", 11}, {"a1", 11},   // Map "a1" to x11
+        {"x12", 12}, {"a2", 12},   // Map "a2" to x12
+        {"x13", 13}, {"a3", 13},   // Map "a3" to x13
+        {"x14", 14}, {"a4", 14},   // Map "a4" to x14
+        {"x15", 15}, {"a5", 15},   // Map "a5" to x15
+        {"x16", 16}, {"a6", 16},   // Map "a6" to x16
+        {"x17", 17}, {"a7", 17},   // Map "a7" to x17
+        {"x18", 18}, {"s2", 18},   // Map "s2" to x18
+        {"x19", 19}, {"s3", 19},   // Map "s3" to x19
+        {"x20", 20}, {"s4", 20},   // Map "s4" to x20
+        {"x21", 21}, {"s5", 21},   // Map "s5" to x21
+        {"x22", 22}, {"s6", 22},   // Map "s6" to x22
+        {"x23", 23}, {"s7", 23},   // Map "s7" to x23
+        {"x24", 24}, {"s8", 24},   // Map "s8" to x24
+        {"x25", 25}, {"s9", 25},   // Map "s9" to x25
+        {"x26", 26}, {"s10", 26},  // Map "s10" to x26
+        {"x27", 27}, {"s11", 27},  // Map "s11" to x27
+        {"x28", 28}, {"t3", 28},   // Map "t3" to x28
+        {"x29", 29}, {"t4", 29},   // Map "t4" to x29
+        {"x30", 30}, {"t5", 30},   // Map "t5" to x30
+        {"x31", 31}, {"t6", 31}    // Map "t6" to x31
+        };
 
     memory.resize(1024 * 1024, 0);
     memoryArray.resize(1 << 18, 0);
@@ -281,9 +306,6 @@ void MainWindow::saveToBinaryFile(const std::string& filename) {
         throw std::runtime_error("Failed to open file: " + filename);
     }
 
-    if (maxAddress > memoryArray.size()) {
-        maxAddress = memoryArray.size();
-    }
     if (maxAddress > 0) {
         file.write(reinterpret_cast<const char*>(memoryArray.data()), maxAddress);
     }
@@ -529,9 +551,6 @@ std::string MainWindow::assemble(const std::string& line, int& currentPC) {
     auto parseImmediate = [&](const std::string& imm_str) -> long long {
         try {
             if (imm_str.length() == 3 && imm_str[0] == '\'' && imm_str[2] == '\'') {
-                if (inst != ".byte") {
-                    throw std::runtime_error("Character literals like \"" + imm_str + "\" are only allowed with .byte directive");
-                }
                 char c = imm_str[1];
                 return static_cast<long long>(c);
             }
@@ -587,7 +606,9 @@ std::string MainWindow::assemble(const std::string& line, int& currentPC) {
                 throw std::runtime_error(".word requires 1 argument, got " + std::to_string(tokens.size() - instruction_start - 1));
             }
             long long value = parseImmediate(tokens[instruction_start + 1]);
-            storeInMemory(static_cast<int>(value), 4, currentAddress);
+            if (value > 4294967295 || value < -2147483648) {
+                throw std::runtime_error("Value out of range for .word: " + std::to_string(value));
+            }
             binaryInstruction = to_bin(static_cast<int>(value), 32);
             if (currentAddress + 4 <= memoryArray.size()) {
                 memoryArray[currentAddress + 0] = static_cast<uint8_t>(value & 0xFF);
@@ -610,7 +631,6 @@ std::string MainWindow::assemble(const std::string& line, int& currentPC) {
             if (value > 65535 || value < -32768) {
                 throw std::runtime_error("Value out of range for .half: " + std::to_string(value));
             }
-            storeInMemory(static_cast<int>(value), 2, currentAddress);
             binaryInstruction = to_bin(static_cast<int>(value), 16);
             if (currentAddress + 2 <= memoryArray.size()) {
                 memoryArray[currentAddress + 0] = static_cast<uint8_t>(value & 0xFF);
@@ -631,10 +651,9 @@ std::string MainWindow::assemble(const std::string& line, int& currentPC) {
             if (value > 255 || value < -128) {
                 throw std::runtime_error("Value out of range for .byte: " + std::to_string(value));
             }
-            storeInMemory(static_cast<int>(value), 1, currentAddress);
             binaryInstruction = to_bin(static_cast<int>(value), 8);
             if (currentAddress + 1 <= memoryArray.size()) {
-                memoryArray[currentAddress + 0] = static_cast<uint8_t>(value & 0xFF);
+                memoryArray[currentAddress] = static_cast<uint8_t>(value & 0xFF);
                 currentAddress += 1;
                 maxAddress = std::max(maxAddress, static_cast<size_t>(currentAddress));
             } else {
@@ -1057,12 +1076,12 @@ std::string MainWindow::assemble(const std::string& line, int& currentPC) {
             }
 
 
-            std::string imm_val = to_bin(imm >> 0, 20); // شیفت به راست برای حذف بیت صفر
+            std::string imm_val = to_bin(imm >> 0, 20);
             std::string rd_val = to_bin(rd, 5);
-            std::string imm20 = imm_val.substr(0, 1);      // imm[20]
-            std::string imm10_1 = imm_val.substr(1, 10);   // imm[10:1]
-            std::string imm11 = imm_val.substr(11, 1);     // imm[11]
-            std::string imm19_12 = imm_val.substr(12, 8);  // imm[19:12]
+            std::string imm20 = imm_val.substr(0, 1);
+            std::string imm10_1 = imm_val.substr(1, 10);
+            std::string imm11 = imm_val.substr(11, 1);
+            std::string imm19_12 = imm_val.substr(12, 8);
 
             binaryInstruction = imm20 + imm10_1 + imm11 + imm19_12 + rd_val + info.opcode;
             if (currentAddress + 4 <= memoryArray.size()) {
