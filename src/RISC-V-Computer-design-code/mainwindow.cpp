@@ -2427,7 +2427,7 @@ void MainWindow::on_load_btn_clicked()
 void MainWindow::closeEvent(QCloseEvent *event)
 {
     on_stop_btn_clicked();
-    QThread::msleep(250);
+    QThread::msleep(500);
     QMainWindow::closeEvent(event);
 }
 
