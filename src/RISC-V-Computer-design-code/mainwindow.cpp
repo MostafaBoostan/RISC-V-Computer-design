@@ -13,6 +13,7 @@
 #include <QString>
 #include <QTime>
 #include <QCoreApplication>
+#include <QThread>
 #include <math.h>
 #include "ui_mainwindow.h"
 #include "mainwindow.h"
@@ -1154,11 +1155,7 @@ void MainWindow::on_run_btn_clicked()
     }
 
     stopflag = 0;
-    QString clock = ui->clock_field->toPlainText();
-    if(clock == ""){
-        clock = "1000";
-        ui->clock_field->setPlainText("1000");
-    }
+    QString clock = ui->clock_field->text();
 
     int delayMs = clock.toInt();
     while(stopflag == 0){
@@ -2433,5 +2430,12 @@ void MainWindow::on_load_btn_clicked()
 
     ui->general_table->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
     ui->general_table->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+}
+
+void MainWindow::closeEvent(QCloseEvent *event)
+{
+    on_stop_btn_clicked();
+    QThread::msleep(500);
+    QMainWindow::closeEvent(event);
 }
 

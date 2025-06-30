@@ -77,5 +77,9 @@ private:
     int lower(long long imm);
     void saveToBinaryFile(const std::string& filename);
     int binaryToSignedInt(const QString& binStr);
+
+protected:
+    void closeEvent(QCloseEvent *event) override;
+
 };
 #endif // MAINWINDOW_H
