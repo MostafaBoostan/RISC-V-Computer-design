@@ -154,6 +154,7 @@ int MainWindow::lower(long long imm) {
     return lower_bits;
 }
 
+
 void MainWindow::parseLabels() {
     symbolTable.clear();
     QString fullText = ui->code_field->toPlainText();
@@ -162,6 +163,10 @@ void MainWindow::parseLabels() {
 
     auto parseImmediate = [](const std::string& imm_str) -> long long {
         try {
+            if (imm_str.length() == 3 && imm_str[0] == '\'' && imm_str[2] == '\'') {
+                char c = imm_str[1];
+                return static_cast<long long>(c);
+            }
             if (imm_str.find("0x") == 0 || imm_str.find("0X") == 0) {
                 std::string hex = imm_str.substr(2);
                 hex.erase(std::remove_if(hex.begin(), hex.end(), ::isspace), hex.end());
@@ -169,6 +174,14 @@ void MainWindow::parseLabels() {
                     throw std::runtime_error("Invalid hexadecimal value: " + imm_str);
                 }
                 return std::stoll(hex, nullptr, 16);
+            }
+            if (imm_str.find("0b") == 0 || imm_str.find("0B") == 0) {
+                std::string binary = imm_str.substr(2);
+                binary.erase(std::remove_if(binary.begin(), binary.end(), ::isspace), binary.end());
+                if (binary.empty() || !std::all_of(binary.begin(), binary.end(), [](char c) { return c == '0' || c == '1'; })) {
+                    throw std::runtime_error("Invalid binary value: " + imm_str);
+                }
+                return std::stoll(binary, nullptr, 2);
             }
             std::string trimmed = imm_str;
             trimmed.erase(std::remove_if(trimmed.begin(), trimmed.end(), ::isspace), trimmed.end());
@@ -245,7 +258,7 @@ void MainWindow::parseLabels() {
             }
             continue;
         }
-
+        // with out lable
         std::vector<std::string> tokens = tokenize(line);
         if (!tokens.empty()) {
             if (instrMap.find(tokens[0]) != instrMap.end()) {
@@ -288,16 +301,6 @@ void MainWindow::parseLabels() {
             }
         }
     }
-}
-
-void MainWindow::storeInMemory(int value, int size, int& address) {
-    if (address + size > static_cast<int>(memory.size())) {
-        memory.resize(address + size, 0);
-    }
-    for (int i = 0; i < size; ++i) {
-        memory[address + i] = (value >> (i * 8)) & 0xFF;
-    }
-    address += size;
 }
 
 void MainWindow::saveToBinaryFile(const std::string& filename) {
@@ -385,6 +388,7 @@ void MainWindow::on_compile_btn_clicked() {
     isCompiling = false;
     ui->compile_btn->setEnabled(true);
 }
+
 
 std::string MainWindow::to_bin(int val, int bits) {
     std::string res(bits, '0');
@@ -520,6 +524,7 @@ std::vector<std::string> MainWindow::tokenize(const std::string& line) {
     qDebug() << "Tokens for line:" << QString::fromStdString(line) << QString::number(tokens.size()) << (tokens.empty() ? "" : QString::fromStdString(tokens[0]));
     return tokens;
 }
+
 
 std::string MainWindow::assemble(const std::string& line, int& currentPC) {
     std::string binaryInstruction;
@@ -1138,6 +1143,9 @@ std::string MainWindow::assemble(const std::string& line, int& currentPC) {
 
     return binaryInstruction;
 }
+
+//End of assembler section
+
 
 void MainWindow::on_run_btn_clicked()
 {
