@@ -2408,7 +2408,7 @@ void MainWindow::on_load_btn_clicked()
     for (int i = 0; i < 32; ++i) {
         QString addrStr = QString("x%1").arg(i, 0, 10);
 
-        QString binStr = QString("00000000000000000000000000000000"); // 32 بیت صفر
+        QString binStr = QString("00000000000000000000000000000000");
 
         QStandardItem* addrItem = new QStandardItem(addrStr);
         addrItem->setTextAlignment(Qt::AlignCenter);
