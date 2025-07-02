@@ -1,4 +1,5 @@
 [Setup]
+PrivilegesRequired=admin
 AppName=RISC-V Computer
 AppVersion=1.0
 DefaultDirName={pf}\RISC-V Computer
